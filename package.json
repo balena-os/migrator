@@ -2,18 +2,14 @@
   "name": "migrator",
   "version": "0.1.0",
   "description": "Migrate computer to balenaOS",
-  "author": "Ken Bannister @kb2ma",
   "private": true,
-  "bin": {
-    "migrator": "./bin/run"
-  },
   "homepage": "https://github.com/balena-os/migrator",
-  "license": "Apache",
   "main": "dist/index.js",
-  "repository": "balena-os/migrator",
+  "repository": "github:balena-os/migrator",
   "files": [
     "/bin",
     "/dist",
+    "*.md",
     "/npm-shrinkwrap.json",
     "/oclif.manifest.json"
   ],
@@ -64,8 +60,10 @@
     "test": "mocha --forbid-only \"test/**/*.test.ts\"",
     "version": "oclif readme && git add README.md"
   },
+  "author": "Balena Inc. (https://balena.io/)",
+  "license": "Apache-2.0",
   "engines": {
-    "node": ">=12.0.0"
+    "node": ">=14"
   },
   "bugs": "https://github.com/balena-os/migrator/issues",
   "keywords": [
