@@ -16,7 +16,7 @@ Presently supports migration only from a computer running Windows 10 on UEFI bas
 Clone the migrator repository, install the node modules and build it as shown below.
 
 ```
-> git clone https://github.com/balena-io-modules/migrator
+> git clone https://github.com/balena-os/migrator.git
 > cd migrator
 > npm install
 > npm run build
