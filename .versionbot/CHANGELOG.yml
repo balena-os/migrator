@@ -1,4 +1,36 @@
 - commits:
+    - subject: Fix installation instructions
+      hash: 51408507f3500fa9bf4a2234f4d6d3d25829e458
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Synchronize npm-shrinkwrap.json with package.json
+      hash: 0384762e34d0b62d17516feecfe3a0df8c79db87
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Restore "bin" property to package.json
+      hash: 8447100b0c132888f82d5ce54a2f08a47aa89fe1
+      body: |
+        Useful for testing and needed to build executable.
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.0.3
+  title: ""
+  date: 2023-03-24T16:24:27.391Z
+- commits:
     - subject: Add flowzone
       hash: 2ecb743af0ed4cc554ca4e2593f1baaefec18c22
       body: ""

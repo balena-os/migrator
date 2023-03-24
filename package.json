@@ -1,6 +1,6 @@
 {
   "name": "migrator",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Migrate computer to balenaOS",
   "private": true,
   "homepage": "https://github.com/balena-os/migrator",
@@ -74,6 +74,6 @@
   ],
   "types": "dist/index.d.ts",
   "versionist": {
-    "publishedAt": "2023-03-22T15:01:07.426Z"
+    "publishedAt": "2023-03-24T16:24:27.463Z"
   }
 }
