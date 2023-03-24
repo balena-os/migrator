@@ -6,6 +6,9 @@
   "homepage": "https://github.com/balena-os/migrator",
   "main": "dist/index.js",
   "repository": "github:balena-os/migrator",
+  "bin": {
+    "migrator": "./bin/run"
+  },
   "files": [
     "/bin",
     "/dist",
