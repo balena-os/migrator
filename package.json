@@ -26,7 +26,7 @@
     "@oclif/test": "^2.3.8",
     "@types/chai": "^4",
     "@types/mocha": "^9.0.0",
-    "@types/node": "^16.18.14",
+    "@types/node": "^18.11.18",
     "chai": "^4",
     "eslint": "^7.32.0",
     "eslint-config-oclif": "^4",
@@ -58,7 +58,7 @@
   "scripts": {
     "build": "shx rm -rf dist && tsc -b",
     "lint": "eslint . --ext .ts --config .eslintrc",
-    "pkg": "pkg -o dist/migrator -t node16-win .",
+    "pkg": "pkg -o dist/migrator -t node18-win .",
     "postpack": "shx rm -f oclif.manifest.json",
     "test": "echo \"No tests yet\" && exit 0",
     "version": "oclif readme && git add README.md"
@@ -66,7 +66,7 @@
   "author": "Balena Inc. (https://balena.io/)",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=16"
+    "node": ">=18"
   },
   "bugs": "https://github.com/balena-os/migrator/issues",
   "keywords": [
