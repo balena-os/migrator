@@ -6,13 +6,16 @@
   "packages": {
     "": {
       "name": "migrator",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "license": "Apache-2.0",
       "dependencies": {
         "@oclif/core": "^2",
         "@oclif/plugin-help": "^5",
         "@oclif/plugin-plugins": "^2.3.2",
-        "etcher-sdk": "^8.5.1"
+        "etcher-sdk": "^8.5.x"
+      },
+      "bin": {
+        "migrator": "bin/run"
       },
       "devDependencies": {
         "@oclif/test": "^2.3.8",
@@ -4755,9 +4758,9 @@
       }
     },
     "node_modules/etcher-sdk": {
-      "version": "8.5.1",
-      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.1.tgz",
-      "integrity": "sha512-MnyECRGoe826wBkF/Uc7BJGTTUxI4FSjiUM/JUE6Ky7SaDIk/lFuwpyE5Xec/NUsAHlhVLJbeDjQshRo+4gFCA==",
+      "version": "8.5.3",
+      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.3.tgz",
+      "integrity": "sha512-EMaGQLrg/J0eSvWCkpsDQKD8/KW4lyc4iIp3yFv/B8T2t7txwO9ro3euY0bIRCUZRAjWePDpmBUggUnMiFfpGg==",
       "dependencies": {
         "@balena/node-beaglebone-usbboot": "^3.0.0",
         "@balena/udif": "^1.1.2",
@@ -15136,9 +15139,9 @@
       "dev": true
     },
     "etcher-sdk": {
-      "version": "8.5.1",
-      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.1.tgz",
-      "integrity": "sha512-MnyECRGoe826wBkF/Uc7BJGTTUxI4FSjiUM/JUE6Ky7SaDIk/lFuwpyE5Xec/NUsAHlhVLJbeDjQshRo+4gFCA==",
+      "version": "8.5.3",
+      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.3.tgz",
+      "integrity": "sha512-EMaGQLrg/J0eSvWCkpsDQKD8/KW4lyc4iIp3yFv/B8T2t7txwO9ro3euY0bIRCUZRAjWePDpmBUggUnMiFfpGg==",
       "requires": {
         "@balena/node-beaglebone-usbboot": "^3.0.0",
         "@balena/udif": "^1.1.2",
