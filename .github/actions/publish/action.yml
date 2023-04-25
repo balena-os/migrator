@@ -1,0 +1,61 @@
+name: Build and draft GitHub release
+description: Create TS/Node executable with vercel/pkg and release as compressed Zip file
+# https://github.com/product-os/flowzone/tree/master/.github/actions
+inputs:
+  json:
+    description: "JSON stringified object containing all the inputs from the calling workflow"
+    required: true
+  secrets:
+    description: "JSON stringified object containing all the secrets from the calling workflow"
+    required: true
+  # --- custom environment
+  NODE_VERSION:
+    type: string
+    default: "18.x"
+
+runs:
+  # https://docs.github.com/en/actions/creating-actions/creating-a-composite-action
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ inputs.NODE_VERSION }}
+        cache: npm
+
+    - name: Install additional tools
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        choco install 7zip yq
+
+    # https://github.com/product-os/scripts/tree/master/shared
+    # https://github.com/product-os/balena-concourse/blob/master/pipelines/github-events/template.yml
+    # node-gyp fails often, so retry on failure.
+    # e.g. https://stackoverflow.com/questions/17967546/common-gypi-not-found-error-in-node-js
+    # Limited error checking for commands; however will fail if can't find executable for 7z
+    - name: Package release
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        npm install
+        if (!$?) {
+          echo "npm install failure; clear node-gyp cache and retry"
+          sleep 10    # allow time for any clean up
+          rm -Recurse -Force ${env:LOCALAPPDATA}\node-gyp\Cache
+          npm install
+        }
+        npm run build
+        npm run pkg
+
+        set version "v$(yq e '.[0].version' .versionbot\CHANGELOG.yml)"
+        cd dist
+        7z a migrator-${version}-windows-x64.zip migrator.exe
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: gh-release-${{ github.event.pull_request.head.sha || github.event.head_commit.id }}
+        path: dist/*.zip
+        retention-days: 1
+
