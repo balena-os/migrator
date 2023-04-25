@@ -1,4 +1,27 @@
 - commits:
+    - subject: Add CI workflow to publish release binary
+      hash: 2ccea2e06caf146c390d95c4d07ed133ce045e2c
+      body: |
+        Also upgrade to node v18.
+      footer:
+        Change-type: minor
+        change-type: minor
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Use latest Etcher SDK in 8.5.x series
+      hash: 5fc9f393a77849ac0da850a02357a48cd0cf5f80
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.1.0
+  title: ""
+  date: 2023-04-25T17:44:20.164Z
+- commits:
     - subject: Fix installation instructions
       hash: 51408507f3500fa9bf4a2234f4d6d3d25829e458
       body: ""
