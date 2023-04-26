@@ -1,4 +1,17 @@
 - commits:
+    - subject: Add missing drivelist native package to executable
+      hash: 4f0678f9cb07ab45bd361dc4c3f678558d6bb55b
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.1.1
+  title: ""
+  date: 2023-04-26T03:36:26.620Z
+- commits:
     - subject: Add CI workflow to publish release binary
       hash: 2ccea2e06caf146c390d95c4d07ed133ce045e2c
       body: |
