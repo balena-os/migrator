@@ -45,6 +45,8 @@ runs:
           rm -Recurse -Force ${env:LOCALAPPDATA}\node-gyp\Cache
           npm install
         }
+        # workaround exclusion of drivelist compiled module
+        rm node_modules\pkg\dictionary\drivelist.js
         npm run build
         npm run pkg
 
