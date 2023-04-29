@@ -1,4 +1,18 @@
 - commits:
+    - subject: Prompt for confirmation before starting
+      hash: 88be26548386496fea332a5ff386da5934de6ce5
+      body: |
+        Also add option for non-interactive operation.
+      footer:
+        Change-type: minor
+        change-type: minor
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.2.0
+  title: ""
+  date: 2023-04-29T13:31:04.784Z
+- commits:
     - subject: Add missing drivelist native package to executable
       hash: 4f0678f9cb07ab45bd361dc4c3f678558d6bb55b
       body: ""
