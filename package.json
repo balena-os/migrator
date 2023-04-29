@@ -20,11 +20,13 @@
     "@oclif/core": "^2",
     "@oclif/plugin-help": "^5",
     "@oclif/plugin-plugins": "^2.3.2",
-    "etcher-sdk": "^8.5.x"
+    "etcher-sdk": "^8.5.x",
+    "inquirer": "^8.2.5"
   },
   "devDependencies": {
     "@oclif/test": "^2.3.8",
     "@types/chai": "^4",
+    "@types/inquirer": "^8.2.5",
     "@types/mocha": "^9.0.0",
     "@types/node": "^18.11.18",
     "chai": "^4",
