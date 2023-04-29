@@ -34,12 +34,11 @@ You need a balenaOS image for your device type. See the downloads [page](https:/
 ```
 
 ### Migrator
-**There is no confirmation for this command. Only run it when your are ready for the migration.**
-
 The command below prepares the migration, and then reboots to execute it and launch balenaOS.
 ```
-> migrator <flasher-image>
+> migrator [--non-interactive] <flasher-image>
 ```
+Since the migrator executes a destructive operation, it first prompts you to confirm continuing. Use the `--non-interactive` option to avoid the prompt and immediately begin the migration.
 
 ## License
 
