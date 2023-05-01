@@ -7,19 +7,22 @@ export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
 
 	static examples = [
-		'> migrate \\Users\\Bob\\balenaos.img',
+		'migrator \\Users\\John\\balena-flasher.img',
 	];
 
-	static args = {
-		sourceImagePath: Args.string({description: 'balenaOS image path', required: true}),
-	};
-
 	static flags = {
+		image: Flags.string({
+			char: 'i',
+			required: true,
+			description: "balenaOS image path name",
+		}),
 		noninteractive: Flags.boolean({
 			aliases: [ 'non-interactive' ],
 			default: false,
+			description: "no user input; use defaults"
 		}),
 	};
+	static args = {};
 
 	async run(): Promise<void> {
 		const {args, flags} = await this.parse(Migrator)
@@ -39,7 +42,7 @@ export default class Migrator extends Command {
 				return;
 			}
 		}
-		migrator.migrate(args.sourceImagePath, winPartition, deviceName, efiLabel)
+		migrator.migrate(flags.image, winPartition, deviceName, efiLabel)
 			.then(console.log)
 			.catch(console.log);
 	}
