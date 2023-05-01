@@ -36,13 +36,13 @@ You need a balenaOS image for your device type. See the downloads [page](https:/
 ### Migrator
 The command below prepares the migration, and then reboots to execute it and launch balenaOS.
 ```
-  migrator -i <value> [--noninteractive]
+  migrator -i <value> [-y]
 
 FLAGS
-  -i, --image=<value>  (required) balenaOS flasher image path name
-  --noninteractive     no user input; use defaults
+  -i, --image=<value>    (required) balenaOS flasher image path name
+  -y, --non-interactive  no user input; use defaults
 ```
-Since the migrator executes a destructive operation, it first prompts you to confirm continuing. Use the `--non-interactive` option to avoid the prompt and immediately begin the migration.
+Since the migrator executes a destructive operation, it first prompts you to confirm. Use the `--non-interactive` option to avoid the prompt and begin the migration immediately.
 
 ## License
 

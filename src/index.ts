@@ -16,8 +16,8 @@ export default class Migrator extends Command {
 			required: true,
 			description: "balenaOS image path name",
 		}),
-		noninteractive: Flags.boolean({
-			aliases: [ 'non-interactive' ],
+		'non-interactive': Flags.boolean({
+			char: 'y',
 			default: false,
 			description: "no user input; use defaults"
 		}),
@@ -30,7 +30,7 @@ export default class Migrator extends Command {
 		const deviceName = "\\\\.\\PhysicalDrive0";
 		const efiLabel = "M";
 
-		if (!flags.noninteractive) {
+		if (!flags['non-interactive']) {
 			console.log("Warning! This tool will overwrite the operating system and all data on this computer.");
 			let responses: any = await inquirer.prompt([{
 				name: 'continue',
