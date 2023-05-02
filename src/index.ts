@@ -7,19 +7,22 @@ export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
 
 	static examples = [
-		'> migrate \\Users\\Bob\\balenaos.img',
+		'migrator \\Users\\John\\balena-flasher.img',
 	];
 
-	static args = {
-		sourceImagePath: Args.string({description: 'balenaOS image path', required: true}),
-	};
-
 	static flags = {
-		noninteractive: Flags.boolean({
-			aliases: [ 'non-interactive' ],
+		image: Flags.string({
+			char: 'i',
+			required: true,
+			description: "balenaOS image path name",
+		}),
+		'non-interactive': Flags.boolean({
+			char: 'y',
 			default: false,
+			description: "no user input; use defaults"
 		}),
 	};
+	static args = {};
 
 	async run(): Promise<void> {
 		const {args, flags} = await this.parse(Migrator)
@@ -27,7 +30,7 @@ export default class Migrator extends Command {
 		const deviceName = "\\\\.\\PhysicalDrive0";
 		const efiLabel = "M";
 
-		if (!flags.noninteractive) {
+		if (!flags['non-interactive']) {
 			console.log("Warning! This tool will overwrite the operating system and all data on this computer.");
 			let responses: any = await inquirer.prompt([{
 				name: 'continue',
@@ -39,7 +42,7 @@ export default class Migrator extends Command {
 				return;
 			}
 		}
-		migrator.migrate(args.sourceImagePath, winPartition, deviceName, efiLabel)
+		migrator.migrate(flags.image, winPartition, deviceName, efiLabel)
 			.then(console.log)
 			.catch(console.log);
 	}

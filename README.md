@@ -29,16 +29,20 @@ These commands generate a single-file executable `migrator.exe` in the `dist` di
 You need a balenaOS image for your device type. See the downloads [page](https://www.balena.io/os) to retrieve the `<flasher-image-archive>` file. Run the commands below to configure the image. See the balenaCLI [documentation](https://docs.balena.io/reference/balena-cli/#os-configure-image) for details of the `os configure` command.
 
 ```
-> unzip <flasher-image-archive>
-> balena os configure <flasher-image> --fleet <fleet-slug> --version <os-version>
+  unzip <flasher-image-archive>
+  balena os configure <flasher-image> --fleet <fleet-slug> --version <os-version>
 ```
 
 ### Migrator
 The command below prepares the migration, and then reboots to execute it and launch balenaOS.
 ```
-> migrator [--non-interactive] <flasher-image>
+  migrator -i <value> [-y]
+
+FLAGS
+  -i, --image=<value>    (required) balenaOS flasher image path name
+  -y, --non-interactive  no user input; use defaults
 ```
-Since the migrator executes a destructive operation, it first prompts you to confirm continuing. Use the `--non-interactive` option to avoid the prompt and immediately begin the migration.
+Since the migrator executes a destructive operation, it first prompts you to confirm. Use the `--non-interactive` option to avoid the prompt and begin the migration immediately.
 
 ## License
 
