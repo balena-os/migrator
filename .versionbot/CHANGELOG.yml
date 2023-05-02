@@ -1,4 +1,26 @@
 - commits:
+    - subject: Minor improvements to --non-interactive option
+      hash: ed798d6282744da61a6b8bda738d723865d6b52b
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Specify flasher image by -i flag, not by a positional arg
+      hash: 95d797665130eeb3870a51226448e27ac2bbbbd3
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.2.1
+  title: ""
+  date: 2023-05-02T10:44:38.801Z
+- commits:
     - subject: Prompt for confirmation before starting
       hash: 88be26548386496fea332a5ff386da5934de6ce5
       body: |
