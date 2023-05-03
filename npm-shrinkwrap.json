@@ -6,13 +6,13 @@
   "packages": {
     "": {
       "name": "migrator",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "license": "Apache-2.0",
       "dependencies": {
+        "@kb2ma/etcher-sdk": "8.5.6",
         "@oclif/core": "^2",
         "@oclif/plugin-help": "^5",
         "@oclif/plugin-plugins": "^2.3.2",
-        "etcher-sdk": "^8.5.x",
         "inquirer": "^8.2.5"
       },
       "bin": {
@@ -1618,6 +1618,53 @@
       "dependencies": {
         "@jridgewell/resolve-uri": "3.1.0",
         "@jridgewell/sourcemap-codec": "1.4.14"
+      }
+    },
+    "node_modules/@kb2ma/etcher-sdk": {
+      "version": "8.5.6",
+      "resolved": "https://registry.npmjs.org/@kb2ma/etcher-sdk/-/etcher-sdk-8.5.6.tgz",
+      "integrity": "sha512-h+pmYt6CzXYtAozuBz9xhrbfFBPKHgmftbC6QHJuf6r/xoQFHbL/3fUWRa4Ji6TwY1fYBGhS6PpfFNcQMm/4pQ==",
+      "dependencies": {
+        "@balena/node-beaglebone-usbboot": "^3.0.0",
+        "@balena/udif": "^1.1.2",
+        "@ronomon/direct-io": "^3.0.1",
+        "aws4-axios": "^2.4.9",
+        "axios": "^0.27.0",
+        "balena-image-fs": "^7.2.0",
+        "blockmap": "^4.0.3",
+        "check-disk-space": "^2.1.0",
+        "cyclic-32": "^1.1.0",
+        "debug": "^3.1.0",
+        "drivelist": "^11.1.0",
+        "file-disk": "^8.0.1",
+        "file-type": "^16.5.4",
+        "gzip-stream": "^2.0.0",
+        "lzma-native": "^8.0.6",
+        "mountutils": "^1.3.20",
+        "node-raspberrypi-usbboot": "1.0.6",
+        "outdent": "^0.8.0",
+        "partitioninfo": "^6.0.2",
+        "rwmutex": "^1.0.0",
+        "tslib": "^2.0.0",
+        "unbzip2-stream": "github:balena-io-modules/unbzip2-stream#4a54f56a25b58950f9e4277c56db2912d62242e7",
+        "unzip-stream": "^0.3.0",
+        "xxhash-addon": "^1.4.0",
+        "yauzl": "^2.9.2",
+        "zip-part-stream": "^2.0.0"
+      },
+      "engines": {
+        "node": ">=16"
+      },
+      "optionalDependencies": {
+        "winusb-driver-generator": "^2.0.0"
+      }
+    },
+    "node_modules/@kb2ma/etcher-sdk/node_modules/debug": {
+      "version": "3.2.7",
+      "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
+      "integrity": "sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==",
+      "dependencies": {
+        "ms": "^2.1.1"
       }
     },
     "node_modules/@nicolo-ribaudo/eslint-scope-5-internals": {
@@ -4770,53 +4817,6 @@
       "dev": true,
       "engines": {
         "node": ">=0.10.0"
-      }
-    },
-    "node_modules/etcher-sdk": {
-      "version": "8.5.3",
-      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.3.tgz",
-      "integrity": "sha512-EMaGQLrg/J0eSvWCkpsDQKD8/KW4lyc4iIp3yFv/B8T2t7txwO9ro3euY0bIRCUZRAjWePDpmBUggUnMiFfpGg==",
-      "dependencies": {
-        "@balena/node-beaglebone-usbboot": "^3.0.0",
-        "@balena/udif": "^1.1.2",
-        "@ronomon/direct-io": "^3.0.1",
-        "aws4-axios": "^2.4.9",
-        "axios": "^0.27.0",
-        "balena-image-fs": "^7.2.0",
-        "blockmap": "^4.0.3",
-        "check-disk-space": "^2.1.0",
-        "cyclic-32": "^1.1.0",
-        "debug": "^3.1.0",
-        "drivelist": "^11.1.0",
-        "file-disk": "^8.0.1",
-        "file-type": "^16.5.4",
-        "gzip-stream": "^2.0.0",
-        "lzma-native": "^8.0.6",
-        "mountutils": "^1.3.20",
-        "node-raspberrypi-usbboot": "1.0.6",
-        "outdent": "^0.8.0",
-        "partitioninfo": "^6.0.2",
-        "rwmutex": "^1.0.0",
-        "tslib": "^2.0.0",
-        "unbzip2-stream": "github:balena-io-modules/unbzip2-stream#4a54f56a25b58950f9e4277c56db2912d62242e7",
-        "unzip-stream": "^0.3.0",
-        "xxhash-addon": "^1.4.0",
-        "yauzl": "^2.9.2",
-        "zip-part-stream": "^2.0.0"
-      },
-      "engines": {
-        "node": ">=16"
-      },
-      "optionalDependencies": {
-        "winusb-driver-generator": "^2.0.0"
-      }
-    },
-    "node_modules/etcher-sdk/node_modules/debug": {
-      "version": "3.2.7",
-      "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
-      "integrity": "sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==",
-      "dependencies": {
-        "ms": "^2.1.1"
       }
     },
     "node_modules/eventemitter3": {
@@ -12745,6 +12745,50 @@
         "@jridgewell/sourcemap-codec": "1.4.14"
       }
     },
+    "@kb2ma/etcher-sdk": {
+      "version": "8.5.6",
+      "resolved": "https://registry.npmjs.org/@kb2ma/etcher-sdk/-/etcher-sdk-8.5.6.tgz",
+      "integrity": "sha512-h+pmYt6CzXYtAozuBz9xhrbfFBPKHgmftbC6QHJuf6r/xoQFHbL/3fUWRa4Ji6TwY1fYBGhS6PpfFNcQMm/4pQ==",
+      "requires": {
+        "@balena/node-beaglebone-usbboot": "^3.0.0",
+        "@balena/udif": "^1.1.2",
+        "@ronomon/direct-io": "^3.0.1",
+        "aws4-axios": "^2.4.9",
+        "axios": "^0.27.0",
+        "balena-image-fs": "^7.2.0",
+        "blockmap": "^4.0.3",
+        "check-disk-space": "^2.1.0",
+        "cyclic-32": "^1.1.0",
+        "debug": "^3.1.0",
+        "drivelist": "^11.1.0",
+        "file-disk": "^8.0.1",
+        "file-type": "^16.5.4",
+        "gzip-stream": "^2.0.0",
+        "lzma-native": "^8.0.6",
+        "mountutils": "^1.3.20",
+        "node-raspberrypi-usbboot": "1.0.6",
+        "outdent": "^0.8.0",
+        "partitioninfo": "^6.0.2",
+        "rwmutex": "^1.0.0",
+        "tslib": "^2.0.0",
+        "unbzip2-stream": "github:balena-io-modules/unbzip2-stream#4a54f56a25b58950f9e4277c56db2912d62242e7",
+        "unzip-stream": "^0.3.0",
+        "winusb-driver-generator": "^2.0.0",
+        "xxhash-addon": "^1.4.0",
+        "yauzl": "^2.9.2",
+        "zip-part-stream": "^2.0.0"
+      },
+      "dependencies": {
+        "debug": {
+          "version": "3.2.7",
+          "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
+          "integrity": "sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==",
+          "requires": {
+            "ms": "^2.1.1"
+          }
+        }
+      }
+    },
     "@nicolo-ribaudo/eslint-scope-5-internals": {
       "version": "5.1.1-v1",
       "resolved": "https://registry.npmjs.org/@nicolo-ribaudo/eslint-scope-5-internals/-/eslint-scope-5-internals-5.1.1-v1.tgz",
@@ -15145,50 +15189,6 @@
       "resolved": "https://registry.npmjs.org/esutils/-/esutils-2.0.3.tgz",
       "integrity": "sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==",
       "dev": true
-    },
-    "etcher-sdk": {
-      "version": "8.5.3",
-      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.3.tgz",
-      "integrity": "sha512-EMaGQLrg/J0eSvWCkpsDQKD8/KW4lyc4iIp3yFv/B8T2t7txwO9ro3euY0bIRCUZRAjWePDpmBUggUnMiFfpGg==",
-      "requires": {
-        "@balena/node-beaglebone-usbboot": "^3.0.0",
-        "@balena/udif": "^1.1.2",
-        "@ronomon/direct-io": "^3.0.1",
-        "aws4-axios": "^2.4.9",
-        "axios": "^0.27.0",
-        "balena-image-fs": "^7.2.0",
-        "blockmap": "^4.0.3",
-        "check-disk-space": "^2.1.0",
-        "cyclic-32": "^1.1.0",
-        "debug": "^3.1.0",
-        "drivelist": "^11.1.0",
-        "file-disk": "^8.0.1",
-        "file-type": "^16.5.4",
-        "gzip-stream": "^2.0.0",
-        "lzma-native": "^8.0.6",
-        "mountutils": "^1.3.20",
-        "node-raspberrypi-usbboot": "1.0.6",
-        "outdent": "^0.8.0",
-        "partitioninfo": "^6.0.2",
-        "rwmutex": "^1.0.0",
-        "tslib": "^2.0.0",
-        "unbzip2-stream": "github:balena-io-modules/unbzip2-stream#4a54f56a25b58950f9e4277c56db2912d62242e7",
-        "unzip-stream": "^0.3.0",
-        "winusb-driver-generator": "^2.0.0",
-        "xxhash-addon": "^1.4.0",
-        "yauzl": "^2.9.2",
-        "zip-part-stream": "^2.0.0"
-      },
-      "dependencies": {
-        "debug": {
-          "version": "3.2.7",
-          "resolved": "https://registry.npmjs.org/debug/-/debug-3.2.7.tgz",
-          "integrity": "sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==",
-          "requires": {
-            "ms": "^2.1.1"
-          }
-        }
-      }
     },
     "eventemitter3": {
       "version": "4.0.7",

@@ -1,7 +1,7 @@
 import {run, Args, Command, Flags} from '@oclif/core';
 // Must use CommonJS version of inquirer due to limitations of vercel/pkg.
 import * as inquirer from 'inquirer';
-import { migrator } from 'etcher-sdk';
+import { migrator } from '@kb2ma/etcher-sdk';
 
 export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
@@ -42,7 +42,10 @@ export default class Migrator extends Command {
 				return;
 			}
 		}
-		migrator.migrate(flags.image, winPartition, deviceName, efiLabel)
+		const options = {
+			rebootMode: 'no-reboot'
+		}
+		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
 			.then(console.log)
 			.catch(console.log);
 	}

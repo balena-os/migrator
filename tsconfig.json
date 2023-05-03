@@ -9,7 +9,7 @@
     "target": "es2019",
     "typeRoots" : [
       "./node_modules/@types",
-      "./node_modules/etcher-sdk/typings"
+      "./node_modules/@kb2ma/etcher-sdk/typings"
     ],
   },
   "include": [
