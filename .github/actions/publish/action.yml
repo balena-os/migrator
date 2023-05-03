@@ -48,6 +48,10 @@ runs:
         # workaround exclusion of drivelist compiled module
         rm node_modules\pkg\dictionary\drivelist.js
         npm run build
+        if (!(Test-Path "node_modules\drivelist\build\Release\drivelist.node")) {
+          Write-Error "drivelist.node not found"
+          Exit 1
+        }
         npm run pkg
 
         set version "v$(yq e '.[0].version' .versionbot\CHANGELOG.yml)"
