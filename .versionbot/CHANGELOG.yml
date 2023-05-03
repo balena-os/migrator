@@ -1,4 +1,17 @@
 - commits:
+    - subject: Fail build if drivelist native module missing
+      hash: a66e43440aabe6c5b790310470e67599b24b9937
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.2.2
+  title: ""
+  date: 2023-05-03T12:32:34.538Z
+- commits:
     - subject: Minor improvements to --non-interactive option
       hash: ed798d6282744da61a6b8bda738d723865d6b52b
       body: ""
