@@ -1,4 +1,17 @@
 - commits:
+    - subject: Rework README from end user point of view
+      hash: 32504646bba40a30ff3424ac7708de77d1666911
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.2.3
+  title: ""
+  date: 2023-05-08T17:44:37.737Z
+- commits:
     - subject: Fail build if drivelist native module missing
       hash: a66e43440aabe6c5b790310470e67599b24b9937
       body: ""
