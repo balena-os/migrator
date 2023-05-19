@@ -21,6 +21,14 @@ export default class Migrator extends Command {
 			default: false,
 			description: "no user input; use defaults"
 		}),
+		'skip-tasks': Flags.string({
+			// See etcher-sdk migrate() function for list of valid tasks.
+			// Use some separator character between tasks, like a comma.
+			// Presently this option is for development/debugging only.
+			default: '',
+			hidden: true,
+			description: "don't perform these tasks"
+		}),
 	};
 	static args = {};
 
@@ -42,7 +50,10 @@ export default class Migrator extends Command {
 				return;
 			}
 		}
-		migrator.migrate(flags.image, winPartition, deviceName, efiLabel)
+
+		const options = { omitTasks: flags['skip-tasks'] }
+
+		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
 			.then(console.log)
 			.catch(console.log);
 	}
