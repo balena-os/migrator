@@ -40,11 +40,12 @@ Download the most recent migrator executable from the Releases [page](https://gi
 
 You must run the command below as Administrator on Windows.
 ```
-  > migrator -i balena-flasher.img [-y]
+  > migrator -i balena-flasher.img [-y] [--analyze]
 
 FLAGS
   -i, --image=<value>    (required) balenaOS flasher image path name
   -y, --non-interactive  no user input; use defaults
+  --analyze              only analyze work to do; don't modify computer
 ```
 Since the migrator executes a destructive operation, it first prompts you to confirm. Use the `--non-interactive` option to avoid the prompt and begin the migration immediately.
 
@@ -54,10 +55,18 @@ You should see output like below on the CLI from a successful run of the migrato
 
 ```
 Migrate \\.\PhysicalDrive0 with image .\balena-flasher-dev.img
+
+Partitions on target:
+index 1, offset 1048576, type C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+index 2, offset 105906176, type E3C9E316-0B5C-4DB8-817D-F92DF00215AE
+index 3, offset 122683392, type EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+index 4, offset 53129248768, type DE94BBA4-06D1-4D40-A16A-BFD50179D6AC
+
 Require 42991616 (41.00 MB) for boot partition
 Require 3977248768 (3793.00 MB) for rootA partition
 Found 1048576 (1.00 MB) not allocated on disk \\.\PhysicalDrive0
 Shrink partition C by 4020240384 (3834.00 MB)
+
 Create flasherBootPartition
 Created new partition for boot at offset 49109008384 with size 42991616
 Create flasherRootAPartition
@@ -65,6 +74,7 @@ Created new partition for data at offset 49152000000 with size 3977248768
 Copy flasherBootPartition from image to disk
 read: {"position":46137345,"bytes":41943041,"speed":655361128.9081677,"averageSpeed":655360015.625}
 write: {"position":41943041,"bytes":41943041,"speed":645276985.799303,"averageSpeed":645277553.8461539}
+Copy complete
 Copy flasherRootAPartition from image to disk
 read: {"position":281018368,"bytes":234881024,"speed":939524096,"averageSpeed":939524096}
 write: {"position":232783872,"bytes":232783872,"speed":927426052.665908,"averageSpeed":927425784.8605578}
@@ -73,6 +83,8 @@ write: {"position":375390208,"bytes":375390208,"speed":882800964.0826695,"averag
 ...
 read: {"position":4022337537,"bytes":3976200193,"speed":692391510.844067,"averageSpeed":700652016.3876652}
 write: {"position":3976200193,"bytes":3976200193,"speed":692235395.8367282,"averageSpeed":700281823.3532934}
+Copy complete
+
 Mount Windows boot partition and copy grub bootloader from image
 Cleared up mount M: for EFI
 Copying: /EFI/BOOT/BOOTX64.EFI 	~=>	 M:\EFI\Boot\BOOTX64.EFI

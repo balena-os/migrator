@@ -7,7 +7,7 @@ export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
 
 	static examples = [
-		'migrator \\Users\\John\\balena-flasher.img',
+		'migrator -i \\Users\\John\\balena-flasher.img',
 	];
 
 	static flags = {
@@ -20,6 +20,11 @@ export default class Migrator extends Command {
 			char: 'y',
 			default: false,
 			description: "no user input; use defaults"
+		}),
+		analyze: Flags.boolean({
+			default: false,
+			exclusive: ['last-task', 'skip-tasks'],
+			description: "only analyze work to do; don't modify computer",
 		}),
 		'last-task': Flags.string({
 			// See etcher-sdk migrate() function for list of valid tasks.
@@ -49,7 +54,7 @@ export default class Migrator extends Command {
 		const deviceName = "\\\\.\\PhysicalDrive0";
 		const efiLabel = "M";
 
-		if (!flags['non-interactive']) {
+		if (!flags['non-interactive'] && !flags.analyze) {
 			console.log("Warning! This tool will overwrite the operating system and all data on this computer.");
 			let responses: any = await inquirer.prompt([{
 				name: 'continue',
@@ -62,8 +67,12 @@ export default class Migrator extends Command {
 			}
 		}
 
+		if (flags.analyze) {
+			// Migrator API requires skip-tasks, so convert.
+			flags['last-task'] = 'analyze'
+		}
 		if (flags['last-task']) {
-			// Generate skip-tasks from last-task. Build list from last to first.
+			// Migrator API requires skip-tasks, so convert. Build list from last to first.
 			let foundTask = false
 			for (const task of ['reboot', 'bootloader', 'copy', 'shrink', 'analyze']) {
 				if (flags['last-task'] == task) {
