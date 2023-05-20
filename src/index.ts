@@ -21,9 +21,20 @@ export default class Migrator extends Command {
 			default: false,
 			description: "no user input; use defaults"
 		}),
+		'last-task': Flags.string({
+			// See etcher-sdk migrate() function for list of valid tasks.
+			// Presently this option is for development/debugging only.
+			// Tasks are executed in order, 'analyze,shrink,copy,bootloader,reboot'.
+			default: '',
+			hidden: true,
+			exclusive: ['skip-tasks'],
+			description: "make this task the last to perform"
+		}),
 		'skip-tasks': Flags.string({
 			// See etcher-sdk migrate() function for list of valid tasks.
 			// Use some separator character between tasks, like a comma.
+			// Unless you really want to skip a task out of sequence, just use
+			// 'last-task' -- it's simpler.
 			// Presently this option is for development/debugging only.
 			default: '',
 			hidden: true,
@@ -51,6 +62,20 @@ export default class Migrator extends Command {
 			}
 		}
 
+		if (flags['last-task']) {
+			// Generate skip-tasks from last-task. Build list from last to first.
+			let foundTask = false
+			for (const task of ['reboot', 'bootloader', 'copy', 'shrink', 'analyze']) {
+				if (flags['last-task'] == task) {
+					foundTask = true
+					break
+				}
+				flags['skip-tasks'] = task + ',' + flags['skip-tasks']
+			}
+			if (!foundTask) {
+				throw Error(`last-task option '${flags['last-task']}' not understood`)
+			}
+		}
 		const options = { omitTasks: flags['skip-tasks'] }
 
 		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
