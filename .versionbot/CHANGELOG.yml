@@ -1,4 +1,35 @@
 - commits:
+    - subject: Add option to only analyze; don't modify computer
+      hash: a0a2997c1e328b9853e7a8d67b8045f4753d1418
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Add hidden option for last task to perform
+      hash: a264df8c14dbbfb8752f5920dd8e73edea2881e5
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Add hidden option for tasks to skip
+      hash: 9ca8b05ce246f48afa2acca74a7fd9d822c951e9
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.2.4
+  title: ""
+  date: 2023-05-21T12:43:43.757Z
+- commits:
     - subject: Rework README from end user point of view
       hash: 32504646bba40a30ff3424ac7708de77d1666911
       body: ""
