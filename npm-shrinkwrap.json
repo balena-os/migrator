@@ -12,7 +12,7 @@
         "@oclif/core": "^2",
         "@oclif/plugin-help": "^5",
         "@oclif/plugin-plugins": "^2.3.2",
-        "etcher-sdk": "^8.5.x",
+        "etcher-sdk": "^8.6.x",
         "inquirer": "^8.2.5"
       },
       "bin": {
@@ -4773,9 +4773,9 @@
       }
     },
     "node_modules/etcher-sdk": {
-      "version": "8.5.3",
-      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.3.tgz",
-      "integrity": "sha512-EMaGQLrg/J0eSvWCkpsDQKD8/KW4lyc4iIp3yFv/B8T2t7txwO9ro3euY0bIRCUZRAjWePDpmBUggUnMiFfpGg==",
+      "version": "8.6.1",
+      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.6.1.tgz",
+      "integrity": "sha512-QgY4XHh24meJoqmkLDeqRe8gAYyobukP3xUizVOK/PZ6ZHDEUoCQ7EK3k0Puqc+mtR8lt+8Km+F6G+BtUfc+JQ==",
       "dependencies": {
         "@balena/node-beaglebone-usbboot": "^3.0.0",
         "@balena/udif": "^1.1.2",
@@ -15147,9 +15147,9 @@
       "dev": true
     },
     "etcher-sdk": {
-      "version": "8.5.3",
-      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.5.3.tgz",
-      "integrity": "sha512-EMaGQLrg/J0eSvWCkpsDQKD8/KW4lyc4iIp3yFv/B8T2t7txwO9ro3euY0bIRCUZRAjWePDpmBUggUnMiFfpGg==",
+      "version": "8.6.1",
+      "resolved": "https://registry.npmjs.org/etcher-sdk/-/etcher-sdk-8.6.1.tgz",
+      "integrity": "sha512-QgY4XHh24meJoqmkLDeqRe8gAYyobukP3xUizVOK/PZ6ZHDEUoCQ7EK3k0Puqc+mtR8lt+8Km+F6G+BtUfc+JQ==",
       "requires": {
         "@balena/node-beaglebone-usbboot": "^3.0.0",
         "@balena/udif": "^1.1.2",
