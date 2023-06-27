@@ -2,6 +2,7 @@ import {run, Args, Command, Flags} from '@oclif/core';
 // Must use CommonJS version of inquirer due to limitations of vercel/pkg.
 import * as inquirer from 'inquirer';
 import { migrator } from 'etcher-sdk';
+import * as wifiProfileReader from './wifi-profile-reader.spec'
 
 export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
@@ -86,6 +87,14 @@ export default class Migrator extends Command {
 			}
 		}
 		const options = { omitTasks: flags['skip-tasks'] }
+
+		// Check for WiFi networks to be configured.
+		const psInstallPath = `${process.cwd()}\\modules`
+		const wifiReader = new wifiProfileReader.ProfileReader(psInstallPath)
+		const wifiProfiles = await wifiReader.collectWifiProfiles()
+		console.log(`\nFound WiFi profiles: ${wifiProfiles.length ? wifiProfiles.map(p => p.name) : "<none>"}`)
+		// just using the first one for now
+		//const wifiProfile:wifiProfileReader.WifiProfile = wifiProfiles ? wifiProfiles[0] : {name: '', key: ''}
 
 		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
 			.then(console.log)
