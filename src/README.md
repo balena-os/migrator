@@ -1,0 +1,1 @@
+oclif does not have a mechanism to allow for a helper module within a "single command" [CLI](https://oclif.io/docs/single_command_cli). However, we need to create non-command modules to analyze the host. So, we are abusing the [mechanism](https://github.com/oclif/oclif/issues/158) to add "spec" files by ending the name of the helper modules with ".spec.ts".
