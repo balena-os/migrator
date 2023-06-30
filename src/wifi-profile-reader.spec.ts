@@ -26,6 +26,8 @@ import { tmp } from '@kb2ma/etcher-sdk';
 const execFileAsync = promisify(execFile);
 const debug = _debug('migrator:wifi-profile-reader');
 const MODULE_NAME = 'WiFiProfileManagement'
+// Must specify Powershell table output width to ensure does not truncate.
+const PWSH_OUTPUT_WIDTH = '| Format-Table | Out-String -Stream -Width 300'
 
 // This code provides a wrapper around the Windows Powershell WiFiProfileManagement 
 // module (https://github.com/jcwalker/WiFiProfileManagement) to retrieve profile
@@ -159,7 +161,7 @@ export class ProfileReader {
 		 */
 		// Then read and update SSID for those profiles.
 		let commands = Array.from(this.setupCommands)
-		commands.push("Get-WiFiAvailableNetwork")
+		commands.push(`Get-WiFiAvailableNetwork ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
@@ -224,7 +226,7 @@ export class ProfileReader {
 		 */
 
 		let commands = Array.from(this.setupCommands)
-		commands.push("Get-WiFiProfile -ClearKey")
+		commands.push(`Get-WiFiProfile -ClearKey ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
