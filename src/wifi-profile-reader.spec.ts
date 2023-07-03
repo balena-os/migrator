@@ -27,7 +27,10 @@ const execFileAsync = promisify(execFile);
 const debug = _debug('migrator:wifi-profile-reader');
 const MODULE_NAME = 'WiFiProfileManagement'
 // Must specify Powershell table output width to ensure does not truncate.
-const PWSH_OUTPUT_WIDTH = '| Format-Table | Out-String -Stream -Width 300'
+const PWSH_FORMAT_TABLE = '| Format-Table'
+const PWSH_OUTPUT_WIDTH = '| Out-String -Stream -Width 300'
+const VALID_AUTH_MODES = ['WPA2PSK', 'WPA3SAE', 'open', 'OWE']
+const KEYLESS_AUTH_MODES = ['open', 'OWE']
 
 // This code provides a wrapper around the Windows Powershell WiFiProfileManagement 
 // module (https://github.com/jcwalker/WiFiProfileManagement) to retrieve profile
@@ -83,7 +86,15 @@ const runPowershell = async (commands: string[]): Promise<string> => {
 export interface WifiProfile {
 	name: string;
 	ssid: string;
-	key: string
+	key: string;
+}
+
+/** Attributes of a WiFi connection useful for testing connectivity. */
+export interface WifiConnection {
+	profileName: string;
+	interfaceIndex: string;
+	ipv4Connectivity: string;
+	ipv6Connectivity: string;
 }
 
 /** 
@@ -129,6 +140,7 @@ export class ProfileReader {
 				if (i == columns.length - 1) {
 					// last column
 					columns[i].endPos = line.length
+					debug(`readColumns: col ${i}: ${columns[i].startPos}, ${columns[i].endPos}`)
 				} else {
 					throw Error(`readColumns: Only found ${i} columns.`)
 				}
@@ -149,7 +161,80 @@ export class ProfileReader {
 	public async collectWifiProfiles(): Promise<WifiProfile[]> {
 		// First get list of profile names and keys.
 		const profiles = await this.readWifiProfiles()
+		// Update SSID for each profile
+		await this.readSsid(profiles)
+		
 
+		return profiles
+	}
+
+	/** Reads the SSID for each profile in the provided list. */
+	public async readConnectionProfile(profiles: WifiProfile[]) {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetConnectionProfile | Format-Table -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity
+		 * 
+		 * Name      InterfaceIndex IPv4Connectivity IPv6Connectivity
+		 * ----      -------------- ---------------- ----------------
+		 * gal47lows              9         Internet        NoTraffic
+		 */
+
+		let commands = Array.from(this.setupCommands)
+		commands.push(`Get-NetConnectionProfile ${PWSH_FORMAT_TABLE} -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readConnectionProfile: ${error}`);
+		}
+
+		// define columns
+		const columnNames = ['Name', 'InterfaceIndex', 'IPv4Connectivity', 'IPv6Connectivity']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					this.readColumns(columns, line)
+				} else {
+					continue
+				}
+			} else {
+				// Find profile
+				let index = columnNames.indexOf('Name')
+				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!name) {
+					// name is blank
+					continue
+				}
+				let profile:WifiProfile = {name: '', key: '', ssid: ''}
+				for (let p of profiles) {
+					if (p.name == name) {
+						profile = p
+					}
+				}
+				if (profile.name) {
+					debug(`readConnectionProfile: ${line}`)
+					index = columnNames.indexOf('InterfaceIndex')
+					const interfaceIndex = line.substring(columns[index].startPos, columns[index].endPos)
+					profile.interfaceIndex = interfaceIndex.trim()
+
+					index = columnNames.indexOf('IPv4Connectivity')
+					const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos)
+					profile.ipv4Connectivity = ipv4Connectivity.trim()
+					index = columnNames.indexOf('IPv6Connectivity')
+					const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos)
+					profile.ipv6Connectivity = ipv6Connectivity.trim()
+				} else {
+					debug(`readConnectionProfile: Can't find profile named ${name}`)
+				}
+			}
+		}
+	}
+
+	/** Reads the SSID for each profile in the provided list. */
+	public async readSsid(profiles: WifiProfile[]) {
 		/* Retrieves output formatted like the example below.
 		 *
 		 *  > Get-WiFiAvailableNetwork
@@ -159,14 +244,13 @@ export class ProfileReader {
 		 * gal47lows            83             True            DOT11_AUTH_ALGO_RSNA_PSK  DOT11_CIPHER_ALGO_CCMP      gal47lows
 		 *                      83             True            DOT11_AUTH_ALGO_RSNA_PSK  DOT11_CIPHER_ALGO_CCMP      gal47lows
 		 */
-		// Then read and update SSID for those profiles.
 		let commands = Array.from(this.setupCommands)
-		commands.push(`Get-WiFiAvailableNetwork ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-WiFiAvailableNetwork ${PWSH_FORMAT_TABLE} ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
 		} catch (error) {
-			throw(`collectWifiProfiles: ${error}`);
+			throw(`readSsid: ${error}`);
 		}
 
 		// define columns
@@ -196,16 +280,15 @@ export class ProfileReader {
 					}
 				}
 				if (profile.name) {
-					debug(`collectWifiProfiles: ${line}`)
+					debug(`readSsid: ${line}`)
 					index = columnNames.indexOf('SSID')
 					const ssid = line.substring(columns[index].startPos, columns[index].endPos)
 					profile.ssid = ssid.trim()
 				} else {
-					debug(`collectWifiProfiles: Can't find profile named ${name}`)
+					debug(`readSsid: Can't find profile named ${name}`)
 				}
 			}
 		}
-		return profiles
 	}
 
 	/**
@@ -226,7 +309,7 @@ export class ProfileReader {
 		 */
 
 		let commands = Array.from(this.setupCommands)
-		commands.push(`Get-WiFiProfile -ClearKey ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-WiFiProfile -ClearKey ${PWSH_FORMAT_TABLE} ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
@@ -259,12 +342,16 @@ export class ProfileReader {
 
 				index = columnNames.indexOf('Authentication')
 				const auth = line.substring(columns[index].startPos, columns[index].endPos).trim()
-				if (auth == 'WPA2PSK') {
+				if (VALID_AUTH_MODES.includes(auth)) {
 					debug(`readWifiProfiles: ${line}`)
 					index = columnNames.indexOf('Password')
 					const password = line.substring(columns[index].startPos, columns[index].endPos)
 					profile.key = password.trim()
-					profiles.push(profile)
+					if (!profile.key && !KEYLESS_AUTH_MODES.includes(auth)) {
+						console.log(`Reject WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
+					} else {
+						profiles.push(profile)
+					}
 				} else {
 					console.log(`Reject WiFi profile ${profile.name} with auth ${auth}`)
 				}
