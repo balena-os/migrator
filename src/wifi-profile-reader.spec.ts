@@ -20,6 +20,7 @@ import { promises as fs } from 'fs';
 import { platform } from 'os';
 import { promisify } from 'util';
 import RWMutex = require('rwmutex');
+import got from 'got';
 
 import { tmp } from '@kb2ma/etcher-sdk';
 
@@ -87,14 +88,18 @@ export interface WifiProfile {
 	name: string;
 	ssid: string;
 	key: string;
+	isApiPingable: boolean;
 }
 
-/** Attributes of a WiFi connection useful for testing connectivity. */
-export interface WifiConnection {
+/** Attributes of a network connection useful for testing connectivity. */
+interface NetConnection {
 	profileName: string;
 	interfaceIndex: string;
-	ipv4Connectivity: string;
-	ipv6Connectivity: string;
+	hasIpv4: boolean;
+	ipv4Address: string;
+	hasIpv6: boolean;
+	ipv6Address: string;
+	isDhcpSourced: boolean;
 }
 
 /** 
@@ -153,8 +158,8 @@ export class ProfileReader {
 	}
 
 	/**
-	 * Collect the list of available WiFi network profiles. Network must use
-	 * WPA2PSK authentication.
+	 * Collect the list of available WiFi network profiles. Includes a test for the
+	 * ability to ping the balenaCloud API.
 	 *
 	 * @return Array of WifiProfile found; empty if none
 	 */
@@ -163,13 +168,98 @@ export class ProfileReader {
 		const profiles = await this.readWifiProfiles()
 		// Update SSID for each profile
 		await this.readSsid(profiles)
-		
 
+		const connections = await this.readNetConnections(profiles)
+		for (let connection of connections.values()) {
+			if (connection.hasIpv4 || connection.hasIpv6) {
+				await this.readIpAddress(connection)
+
+				for (let p of profiles) {
+					if (p.name == connection.profileName) {
+						const isPingable = await this.pingApi(connection)
+						p.isApiPingable = isPingable
+						break
+					}
+				}
+			}
+		}
 		return profiles
 	}
 
-	/** Reads the SSID for each profile in the provided list. */
-	public async readConnectionProfile(profiles: WifiProfile[]) {
+	/** Sends a ping request to balena API. Returns true on success. */
+	private async pingApi(connection: NetConnection): Promise<boolean> {
+		const options = {
+			localAddress: (connection.hasIpv4 ? connection.ipv4Address : connection.ipv6Address)
+		}
+		debug(`pingApi: sending request from address ${options.localAddress}`)
+		const response = await got('https://api.balena-cloud.com/ping').text()
+		debug(`pingApi: response: ${response}`)
+		return response == 'OK'
+	}
+
+	/** 
+	 * Reads the IP address for a network connection and updates the connection object 
+	 * with this value. The connection must have either IPv4 or IPv6 connectivity.
+	 * Prefers IPv4 if connection has both IPv4 and IPv6 connectivity
+	 */
+	private async readIpAddress(connection: NetConnection): Promise<void> {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetIPAddress -InterfaceIndex 9 -AddressFamily IPv4 | Format-Table -Property IPAddress, SuffixOrigin
+		 * 
+		 * IPAddress     SuffixOrigin
+		 * ---------     ------------
+		 * 192.168.1.217         Dhcp
+		 */
+
+		let commands = Array.from(this.setupCommands)
+		commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.interfaceIndex} -AddressFamily ${connection.hasIpv4 ? 'IPv4' : 'IPv6'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readIpAddress: ${error}`);
+		}
+
+		// define columns
+		const columnNames = ['IPAddress', 'SuffixOrigin']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let connections = new Map<string, NetConnection>()
+
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					this.readColumns(columns, line)
+				} else {
+					continue
+				}
+			} else {
+				debug(`readIpAddress: ${line}`)
+				let index = columnNames.indexOf('IPAddress')
+				const ipAddress = line.substring(columns[index].startPos, columns[index].endPos)
+				if (!ipAddress.trim()) {
+					// Probably a blank line at end of output
+					continue
+				}
+				if (connection.hasIpv4) {
+					connection.ipv4Address = ipAddress.trim()
+				} else {
+					connection.ipv6Address = ipAddress.trim()
+				}
+				index = columnNames.indexOf('SuffixOrigin')
+				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos)
+				connection.isDhcpSourced = (suffixOrigin.trim().toUpperCase()  == 'DHCP')
+			}
+		}
+	}
+
+	/** 
+	 * Reads the network connection, if any, for each profile in the provided list.
+	 * Generates a dictionary that associated a profile with the network connection.
+	 */
+	private async readNetConnections(profiles: WifiProfile[]): Promise<Map<string,NetConnection>> {
 		/* Retrieves output formatted like the example below.
 		 * 
 		 * PS > Get-NetConnectionProfile | Format-Table -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity
@@ -185,12 +275,14 @@ export class ProfileReader {
 		try {
 			listText = await runPowershell(commands);
 		} catch (error) {
-			throw(`readConnectionProfile: ${error}`);
+			throw(`readNetConnections: ${error}`);
 		}
 
 		// define columns
 		const columnNames = ['Name', 'InterfaceIndex', 'IPv4Connectivity', 'IPv6Connectivity']
 		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let connections = new Map<string, NetConnection>()
 
 		let foundHeader = false
 		for (let line of listText.split('\n')) {
@@ -208,33 +300,35 @@ export class ProfileReader {
 					// name is blank
 					continue
 				}
-				let profile:WifiProfile = {name: '', key: '', ssid: ''}
+				let profile:WifiProfile = {name: '', key: '', ssid: '', isApiPingable: false}
 				for (let p of profiles) {
 					if (p.name == name) {
 						profile = p
 					}
 				}
 				if (profile.name) {
-					debug(`readConnectionProfile: ${line}`)
+					let connection = { profileName: profile.name, interfaceIndex: '', hasIpv4: false, ipv4Address: '', hasIpv6: false, ipv6Address: '', isDhcpSourced: false }
+					debug(`readNetConnections: ${line}`)
 					index = columnNames.indexOf('InterfaceIndex')
 					const interfaceIndex = line.substring(columns[index].startPos, columns[index].endPos)
-					profile.interfaceIndex = interfaceIndex.trim()
-
+					connection.interfaceIndex = interfaceIndex.trim()
 					index = columnNames.indexOf('IPv4Connectivity')
 					const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos)
-					profile.ipv4Connectivity = ipv4Connectivity.trim()
+					connection.hasIpv4 = (ipv4Connectivity.trim()  == 'Internet')
 					index = columnNames.indexOf('IPv6Connectivity')
 					const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos)
-					profile.ipv6Connectivity = ipv6Connectivity.trim()
+					connection.hasIpv6 = (ipv6Connectivity.trim()  == 'Internet')
+					connections.set(profile.name, connection)
 				} else {
-					debug(`readConnectionProfile: Can't find profile named ${name}`)
+					debug(`readNetConnections: Can't find profile named ${name}`)
 				}
 			}
 		}
+		return connections
 	}
 
-	/** Reads the SSID for each profile in the provided list. */
-	public async readSsid(profiles: WifiProfile[]) {
+	/** Reads the SSID for each profile in the provided list and updates the ssid property. */
+	private async readSsid(profiles: WifiProfile[]) {
 		/* Retrieves output formatted like the example below.
 		 *
 		 *  > Get-WiFiAvailableNetwork
@@ -273,7 +367,7 @@ export class ProfileReader {
 					// name is blank
 					continue
 				}
-				let profile:WifiProfile = {name: '', key: '', ssid: ''}
+				let profile:WifiProfile = {name: '', key: '', ssid: '', isApiPingable: false}
 				for (let p of profiles) {
 					if (p.name == name) {
 						profile = p
@@ -331,7 +425,7 @@ export class ProfileReader {
 					continue
 				}
 			} else {
-				let profile:WifiProfile = { name: '', key: '', ssid: ''}
+				let profile:WifiProfile = { name: '', key: '', ssid: '', isApiPingable: false}
 				let index = columnNames.indexOf('ProfileName')
 				const name = line.substring(columns[index].startPos, columns[index].endPos)
 				if (!name.trim()) {
