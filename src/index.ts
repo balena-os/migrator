@@ -99,8 +99,12 @@ export default class Migrator extends Command {
 		const psInstallPath = `${process.cwd()}\\modules`
 		const wifiReader = new wifiProfileReader.ProfileReader(psInstallPath)
 		const wifiProfiles = await wifiReader.collectWifiProfiles()
-		console.log(`Found WiFi profiles: ${wifiProfiles.length ? wifiProfiles.map(p => " " + p.name) : "<none>"}\n`)
-		options.wifiProfiles = wifiProfiles
+		console.log(`Found WiFi profiles: ${wifiProfiles.length ? wifiProfiles.map(p => " " + p.name) : "<none>"}`)
+		const pinged = wifiProfiles.find(p => p.pingedBalenaApi)
+		if (!pinged) {
+			throw Error("balena API not reachable from any profile")
+		}
+		console.log(`balena API is reachable from profile ${pinged.name}\n`)
 
 		//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
 		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)

@@ -27,11 +27,14 @@ import { tmp } from '@kb2ma/etcher-sdk';
 const execFileAsync = promisify(execFile);
 const debug = _debug('migrator:wifi-profile-reader');
 const MODULE_NAME = 'WiFiProfileManagement'
-// Must specify Powershell table output width to ensure does not truncate.
+// Must specify Powershell line output width to ensure output does not truncate.
 const PWSH_FORMAT_TABLE = '| Format-Table'
 const PWSH_OUTPUT_WIDTH = '| Out-String -Stream -Width 300'
-const VALID_AUTH_MODES = ['WPA2PSK', 'WPA3SAE', 'open', 'OWE']
+// These collections are used to qualify acceptable results.
+const VALID_AUTH_MODES = ['WPAPSK', 'WPA2PSK', 'WPA3SAE', 'open', 'OWE']
 const KEYLESS_AUTH_MODES = ['open', 'OWE']
+const INVALID_CONNECTIVITY_MODES = ['Disconnected', 'NoTraffic']
+const INVALID_ADDRESS_STATES = ['Duplicate', 'Invalid']
 
 // This code provides a wrapper around the Windows Powershell WiFiProfileManagement 
 // module (https://github.com/jcwalker/WiFiProfileManagement) to retrieve profile
@@ -83,12 +86,16 @@ const runPowershell = async (commands: string[]): Promise<string> => {
 	return output.stdout;
 };
 
-/** Configuration values for a single WiFi network profile. */
+/** 
+ * Configuration values for a single WiFi network profile. 'key' is empty for 
+ * networks with no authentication. 'pingedBalenaApi' is true if able to ping
+ * balena API via this network; false is inconclusive.
+ */
 export interface WifiProfile {
 	name: string;
 	ssid: string;
 	key: string;
-	isApiPingable: boolean;
+	pingedBalenaApi: boolean;
 }
 
 /** Attributes of a network connection useful for testing connectivity. */
@@ -96,10 +103,9 @@ interface NetConnection {
 	profileName: string;
 	interfaceIndex: string;
 	hasIpv4: boolean;
-	ipv4Address: string;
 	hasIpv6: boolean;
-	ipv6Address: string;
-	isDhcpSourced: boolean;
+	ipAddress: string;
+	isManualAddress: boolean;
 }
 
 /** 
@@ -158,62 +164,79 @@ export class ProfileReader {
 	}
 
 	/**
-	 * Collect the list of available WiFi network profiles. Includes a test for the
-	 * ability to ping the balenaCloud API.
+	 * Collect the list of available WiFi network profiles. Includes profile name, 
+	 * SSID, and key (passphrase) if any). Validates that we can ping balena API for
+	 * at least one currently connected network, identified by 'pingedBalenaApi'
+	 * attribute of profile.
 	 *
 	 * @return Array of WifiProfile found; empty if none
 	 */
 	public async collectWifiProfiles(): Promise<WifiProfile[]> {
-		// First get list of profile names and keys.
+		// First get map of profile names and keys, and populate SSID.
 		const profiles = await this.readWifiProfiles()
-		// Update SSID for each profile
-		await this.readSsid(profiles)
+		await this.readAvailableSsid(profiles)
+		// If WiFi network not available, assume SSID will match profile name.
+		for (let p of profiles.values()) {
+			if (!p.ssid) {
+				p.ssid = p.name
+			}
+		}
 
 		const connections = await this.readNetConnections(profiles)
 		for (let connection of connections.values()) {
 			if (connection.hasIpv4 || connection.hasIpv6) {
 				await this.readIpAddress(connection)
-
-				for (let p of profiles) {
-					if (p.name == connection.profileName) {
-						const isPingable = await this.pingApi(connection)
-						p.isApiPingable = isPingable
-						break
+				// Not presently accepting manually generated IP addresses
+				if (connection.ipAddress && !connection.isManualAddress) {
+					let p = profiles.get(connection.profileName)
+					if (p) {
+						p.pingedBalenaApi = await this.pingApi(connection)
+						// Only require one successful ping
+						if (p.pingedBalenaApi) {
+							break
+						}
+					} else {
+						// unexpected; readNetConnections() already validates profile name
+						console.log(`collectWifiProfiles: Can't find profile ${connection.profileName} for network connection`)
 					}
 				}
 			}
 		}
-		return profiles
+		// convert iterator to array
+		const pArray:WifiProfile[] = []
+		profiles.forEach((value,key,map) => {pArray.push(value)})
+		return pArray
 	}
 
 	/** Sends a ping request to balena API. Returns true on success. */
 	private async pingApi(connection: NetConnection): Promise<boolean> {
 		const options = {
-			localAddress: (connection.hasIpv4 ? connection.ipv4Address : connection.ipv6Address)
+			localAddress: connection.ipAddress
 		}
 		debug(`pingApi: sending request from address ${options.localAddress}`)
-		const response = await got('https://api.balena-cloud.com/ping').text()
-		debug(`pingApi: response: ${response}`)
-		return response == 'OK'
+		const response = await got('https://api.balena-cloud.com/ping')
+		debug(`pingApi: response code: ${response.statusCode}`)
+		return response.statusCode == 200
 	}
 
 	/** 
 	 * Reads the IP address for a network connection and updates the connection object 
 	 * with this value. The connection must have either IPv4 or IPv6 connectivity.
-	 * Prefers IPv4 if connection has both IPv4 and IPv6 connectivity
+	 * Prefers IPv4 address if connection has both IPv4 and IPv6 connectivity. Also 
+	 * validates reported state of address via INVALID_ADDRESS_STATES.
 	 */
 	private async readIpAddress(connection: NetConnection): Promise<void> {
 		/* Retrieves output formatted like the example below.
 		 * 
-		 * PS > Get-NetIPAddress -InterfaceIndex 9 -AddressFamily IPv4 | Format-Table -Property IPAddress, SuffixOrigin
+		 * PS > Get-NetIPAddress -InterfaceIndex 9 -AddressFamily IPv4 | Format-Table -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin
 		 * 
-		 * IPAddress     SuffixOrigin
-		 * ---------     ------------
-		 * 192.168.1.217         Dhcp
+		 * IPAddress     AddressState PrefixOrigin SuffixOrigin
+		 * ---------     ------------ ------------ ------------
+		 * 192.168.1.217    Preferred         Dhcp         Dhcp
 		 */
 
 		let commands = Array.from(this.setupCommands)
-		commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.interfaceIndex} -AddressFamily ${connection.hasIpv4 ? 'IPv4' : 'IPv6'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.interfaceIndex} -AddressFamily ${connection.hasIpv4 ? 'IPv4' : 'IPv6'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
@@ -222,10 +245,8 @@ export class ProfileReader {
 		}
 
 		// define columns
-		const columnNames = ['IPAddress', 'SuffixOrigin']
+		const columnNames = ['IPAddress', 'AddressState', 'PrefixOrigin', 'SuffixOrigin']
 		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
-
-		let connections = new Map<string, NetConnection>()
 
 		let foundHeader = false
 		for (let line of listText.split('\n')) {
@@ -238,28 +259,39 @@ export class ProfileReader {
 			} else {
 				debug(`readIpAddress: ${line}`)
 				let index = columnNames.indexOf('IPAddress')
-				const ipAddress = line.substring(columns[index].startPos, columns[index].endPos)
-				if (!ipAddress.trim()) {
+				const ipAddress = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!ipAddress) {
 					// Probably a blank line at end of output
 					continue
 				}
-				if (connection.hasIpv4) {
-					connection.ipv4Address = ipAddress.trim()
-				} else {
-					connection.ipv6Address = ipAddress.trim()
+				// Ensure address state is valid before saving the address.
+				index = columnNames.indexOf('AddressState')
+				const addressState = line.substring(columns[index].startPos, columns[index].endPos)
+				if (INVALID_ADDRESS_STATES.includes(addressState)) {
+					continue
 				}
+				connection.ipAddress = ipAddress
+				index = columnNames.indexOf('PrefixOrigin')
+				const prefixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				index = columnNames.indexOf('SuffixOrigin')
-				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos)
-				connection.isDhcpSourced = (suffixOrigin.trim().toUpperCase()  == 'DHCP')
+				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.isManualAddress = (prefixOrigin == 'Manual' || suffixOrigin == 'Manual')
+				if (connection.isManualAddress) {
+					debug(`IP address ${ipAddress} generated manually`)
+				}
 			}
 		}
 	}
 
 	/** 
-	 * Reads the network connection, if any, for each profile in the provided list.
-	 * Generates a dictionary that associated a profile with the network connection.
+	 * Queries for the active network connection, if any, for each profile in the 
+	 * provided Map. Uses INVALID_CONNECTIVITY_MODES to qualify connection state
+	 * for IPv4 (hasIpv4) and IPv6 (hasIpv6). Generates a map that associates a 
+	 * profile with the network connection.
+	 *
+	 * @return Map of NetConnection found, keyed on profile name; empty if none
 	 */
-	private async readNetConnections(profiles: WifiProfile[]): Promise<Map<string,NetConnection>> {
+	private async readNetConnections(profiles: Map<string,WifiProfile>): Promise<Map<string,NetConnection>> {
 		/* Retrieves output formatted like the example below.
 		 * 
 		 * PS > Get-NetConnectionProfile | Format-Table -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity
@@ -300,35 +332,34 @@ export class ProfileReader {
 					// name is blank
 					continue
 				}
-				let profile:WifiProfile = {name: '', key: '', ssid: '', isApiPingable: false}
-				for (let p of profiles) {
-					if (p.name == name) {
-						profile = p
-					}
-				}
-				if (profile.name) {
-					let connection = { profileName: profile.name, interfaceIndex: '', hasIpv4: false, ipv4Address: '', hasIpv6: false, ipv6Address: '', isDhcpSourced: false }
-					debug(`readNetConnections: ${line}`)
-					index = columnNames.indexOf('InterfaceIndex')
-					const interfaceIndex = line.substring(columns[index].startPos, columns[index].endPos)
-					connection.interfaceIndex = interfaceIndex.trim()
-					index = columnNames.indexOf('IPv4Connectivity')
-					const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos)
-					connection.hasIpv4 = (ipv4Connectivity.trim()  == 'Internet')
-					index = columnNames.indexOf('IPv6Connectivity')
-					const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos)
-					connection.hasIpv6 = (ipv6Connectivity.trim()  == 'Internet')
-					connections.set(profile.name, connection)
-				} else {
+				const profile = profiles.get(name)
+				if (profile == undefined) {
 					debug(`readNetConnections: Can't find profile named ${name}`)
+					continue
 				}
+
+				let connection = { profileName: profile.name, interfaceIndex: '', hasIpv4: false, hasIpv6: false, ipAddress: '', isManualAddress: false }
+				debug(`readNetConnections: ${line}`)
+				index = columnNames.indexOf('InterfaceIndex')
+				const interfaceIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.interfaceIndex = interfaceIndex
+				index = columnNames.indexOf('IPv4Connectivity')
+				const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.hasIpv4 = !INVALID_CONNECTIVITY_MODES.includes(ipv4Connectivity)
+				index = columnNames.indexOf('IPv6Connectivity')
+				const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.hasIpv6 = !INVALID_CONNECTIVITY_MODES.includes(ipv6Connectivity)
+				connections.set(profile.name, connection)
 			}
 		}
 		return connections
 	}
 
-	/** Reads the SSID for each profile in the provided list and updates the ssid property. */
-	private async readSsid(profiles: WifiProfile[]) {
+	/** 
+	 * Reads the SSID from available WiFi networks for each profile in the provided list 
+	 * and updates the ssid property.
+	 */
+	private async readAvailableSsid(profiles: Map<string,WifiProfile>) {
 		/* Retrieves output formatted like the example below.
 		 *
 		 *  > Get-WiFiAvailableNetwork
@@ -344,7 +375,7 @@ export class ProfileReader {
 		try {
 			listText = await runPowershell(commands);
 		} catch (error) {
-			throw(`readSsid: ${error}`);
+			throw(`readAvailableSsid: ${error}`);
 		}
 
 		// define columns
@@ -367,32 +398,27 @@ export class ProfileReader {
 					// name is blank
 					continue
 				}
-				let profile:WifiProfile = {name: '', key: '', ssid: '', isApiPingable: false}
-				for (let p of profiles) {
-					if (p.name == name) {
-						profile = p
-					}
+				const profile = profiles.get(name)
+				if (profile == undefined) {
+					debug(`readAvailableSsid: Can't find profile for profile ${name}`)
+					continue
 				}
-				if (profile.name) {
-					debug(`readSsid: ${line}`)
-					index = columnNames.indexOf('SSID')
-					const ssid = line.substring(columns[index].startPos, columns[index].endPos)
-					profile.ssid = ssid.trim()
-				} else {
-					debug(`readSsid: Can't find profile named ${name}`)
-				}
+
+				debug(`readAvailableSsid: ${line}`)
+				index = columnNames.indexOf('SSID')
+				const ssid = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				profile.ssid = ssid
 			}
 		}
 	}
 
 	/**
-	 * Reads the table of WiFi profiles, and returns an array of profiles with
-	 * WPA2 PSK authentication. Writes to stdout for a profile that does not use
-	 * this authentication.
+	 * Reads the table of WiFi profiles for this computer and returns acceptable
+	 * profiles based on VALID_AUTH_MODES.
 	 *
-	 * @return Array of WifiProfile found; empty if none
+	 * @return Map of WifiProfile found, keyed on profile name; empty if none
 	 */
-	private async readWifiProfiles(): Promise<WifiProfile[]> {
+	private async readWifiProfiles(): Promise<Map<string,WifiProfile>> {
 		/* Retrieves output formatted like the example below.
 		 *
 		 * > Get-WiFiProfile -ClearKey
@@ -416,7 +442,7 @@ export class ProfileReader {
 		const columnNames = ['ProfileName', 'ConnectionMode', 'Authentication', 'Encryption', 'Password']
 		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
 
-		let profiles:WifiProfile[] = []
+		let profiles = new Map<string, WifiProfile>()
 		for (let line of listText.split('\n')) {
 			if (!columns[0].endPos) {
 				if(line.indexOf('-----') >= 0) {
@@ -425,29 +451,29 @@ export class ProfileReader {
 					continue
 				}
 			} else {
-				let profile:WifiProfile = { name: '', key: '', ssid: '', isApiPingable: false}
+				let profile:WifiProfile = { name: '', key: '', ssid: '', pingedBalenaApi: false}
 				let index = columnNames.indexOf('ProfileName')
-				const name = line.substring(columns[index].startPos, columns[index].endPos)
-				if (!name.trim()) {
+				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!name) {
 					// skip blank lines, etc.
 					continue
 				}
-				profile.name = name.trim()
+				profile.name = name
 
 				index = columnNames.indexOf('Authentication')
 				const auth = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (VALID_AUTH_MODES.includes(auth)) {
 					debug(`readWifiProfiles: ${line}`)
 					index = columnNames.indexOf('Password')
-					const password = line.substring(columns[index].startPos, columns[index].endPos)
-					profile.key = password.trim()
+					const password = line.substring(columns[index].startPos, columns[index].endPos).trim()
+					profile.key = password
 					if (!profile.key && !KEYLESS_AUTH_MODES.includes(auth)) {
-						console.log(`Reject WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
+						console.log(`Rejected WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
 					} else {
-						profiles.push(profile)
+						profiles.set(profile.name, profile)
 					}
 				} else {
-					console.log(`Reject WiFi profile ${profile.name} with auth ${auth}`)
+					console.log(`Rejected WiFi profile ${profile.name} with auth ${auth}`)
 				}
 			}
 		}
