@@ -86,28 +86,34 @@ export const runPowershell = async (commands: string[]): Promise<string> => {
 };
 
 /** 
- * Configuration values for a networking profile.
+ * Configuration attributes for a networking connection.
+ * 'name' provided for WiFi and some non-WiFi profiles.
  * 'wifiSsid' is empty for non-WiFi networks.
  * 'wifiKey' is empty for networks with no authentication. 
- * 'pingedBalenaApi' is true if able to ping balena API via this network; false is inconclusive.
+ * 'ifaceId' identifies the network interface currently used by the profile; 
+ *           useful but not really part of the configuration
  */
 export interface ConnectionProfile {
 	name: string;
-	interfaceId: string;
 	wifiSsid: string;
 	wifiKey: string;
-	pingedBalenaApi: boolean;
+	ifaceId: string;
 }
 
 /** 
- * Attributes of a network connection useful for testing connectivity.
- * 'connectionType' categorizes the connection and can be a value like 'wifi'.
- * 'interfaceId' helps map a connection to a networking adapter.
+ * Attributes of a network adapter/interface/connection useful for testing connectivity.
+ * 'ifaceType' categorizes the connection; 'wifi' or 'ethernet'.
+ * 'ifaceId' provides a unique handle for an adapter/interface.
+ * 'profileName' provides a Windows name for an active connection; uses same name as WiFi ssid
+ * 'hasIpv4' if connection is using IPv4 networking
+ * 'hasIpv6' if connection is using IPv6 networking
+ * 'ipAddress' used by a connection
+ * 'isManualAddress' if address was assigned manually
  */
-interface NetConnection {
-	name: string;
-	connectionType: string;
-	interfaceId: string;
+interface NetConnectivity {
+	ifaceType: string;
+	ifaceId: string;
+	profileName: string;
 	hasIpv4: boolean;
 	hasIpv6: boolean;
 	ipAddress: string;
@@ -155,260 +161,292 @@ export const readColumns = (columns:Column[] = [], line = ''): void => {
 }
 
 /**
- * Collect the list of available WiFi network profiles. Includes profile name, 
- * SSID, and key (passphrase) if any). Validates that we can ping balena API for
- * at least one currently connected network, identified by 'pingedBalenaApi'
- * attribute of profile.
- *
- * @return Array of WifiProfile found; empty if none
+ * Analyzes networking connectivity. Always call run() first. Uses Powershell modules
+ * to collect the information.
+ * 
+ * Example use:
+ *   const analyzer = new Analyzer('')
+ *   await analyzer.run()
+ *   const profiles = analyzer.getProfiles()
+ *   const connection = await analyzer.testApiConnectivity()
  */
-export const collectProfiles = (psInstallPath: string): Promise<ConnectionProfile[]> => {
-	// First get map of profile names and keys, and populate SSID.
-	const wifiReader = new wifiProfileReader.ProfileReader(psInstallPath)
-	const profiles = await wifiReader.collectProfiles()
+export class Analyzer {
+	/** Map keyed on interface ID */
+	private connMap: Map<string,NetConnectivity> = new Map<string,NetConnectivity>()
+	private profiles: ConnectionProfile[] = []
+	private psModulePath = ''
 
-	const connections = await this.readNetConnections()
-	await this.readNetAdapters(profiles, connections)
-	const profileMap = new Map<string, ConnectionProfile>()
-	connectionProfiles.forEach(profile => profileMap.set(profile.interfaceId, profile))
+	/** 
+	 * If using a built-in module path, leave modulePath empty. Otherwise this path
+	 * will be added to the Powershell module page for the WiFiProfileManagement module.
+	 */
+	constructor(modulePath = '') {
+		this.psModulePath = modulePath
+	}
 
-	for (let connection of connections.values()) {
-		if (connection.hasIpv4 || connection.hasIpv6) {
-			await this.readIpAddress(connection)
-			// Not presently accepting manually generated IP addresses
-			if (connection.ipAddress && !connection.isManualAddress) {
-				let p = profileMap.get(connection.interfaceId)
-				if (p) {
-					p.pingedBalenaApi = await this.pingApi(connection)
-					// Only require one successful ping
-					if (p.pingedBalenaApi) {
-						break
+	/**
+	 * Runs the analyzer. Collect networking profiles and connectivity data. Must
+	 * call this before other public methods.
+	 */
+	public async run(): Promise<void> {
+		const wifiReader = new wifiProfileReader.ProfileReader(this.psModulePath)
+		this.profiles = await wifiReader.collectProfiles()
+
+		this.connMap = new Map<string, NetConnectivity>()
+		// Must call these helper functions in this order.
+		await this.readNetConnections()
+		await this.readNetAdapters()
+	}
+
+	/**
+	 * Provides the list of available network profiles. Includes profile name, 
+	 * and WiFi SSID and key (passphrase) if any. May also include a profile for
+	 * an ethernet based connection.
+	 *
+	 * @return Array of ConnectionProfile found; empty if none
+	 */
+	public getProfiles(): ConnectionProfile[] {
+		return this.profiles
+	}
+
+	/**
+	 * Validates that at least one currently connected network interface can ping 
+	 * balena API.
+	 *
+	 * @return Connection used to reach the API
+	 */
+	public async testApiConnectivity(): Promise<NetConnectivity | null> {
+		for (let connection of this.connMap.values()) {
+			if (connection.hasIpv4 || connection.hasIpv6) {
+				await this.readIpAddress(connection)
+				// Not presently accepting manually generated IP addresses
+				if (connection.ipAddress && !connection.isManualAddress) {
+					const pingOk = await this.pingApi(connection)
+					if (pingOk) {
+						// Only require ping to one connection
+						return connection
 					}
-				} else {
-					// unexpected; readNetConnections() already validates profile name
-					console.log(`collectWifiProfiles: Can't find profile ${connection.profileName} for network connection`)
 				}
 			}
 		}
-	}
-	// convert iterator to array
-	const pArray:WifiProfile[] = []
-	profiles.forEach((value,key,map) => {pArray.push(value)})
-	return pArray
-}
-
-/** Sends a ping request to balena API. Returns true on success. */
-const pingApi = async (connection: NetConnection): Promise<boolean> => {
-	const options = {
-		localAddress: connection.ipAddress
-	}
-	debug(`pingApi: sending request from address ${options.localAddress}`)
-	const response = await got('https://api.balena-cloud.com/ping')
-	debug(`pingApi: response code: ${response.statusCode}`)
-	return response.statusCode == 200
-}
-
-/** 
- * Reads the IP address for a network connection and updates the connection object 
- * with this value. The connection must have either IPv4 or IPv6 connectivity.
- * Prefers IPv4 address if connection has both IPv4 and IPv6 connectivity. Also 
- * validates reported state of address via INVALID_ADDRESS_STATES.
- */
-const readIpAddress = async (connection: NetConnection): Promise<void> => {
-	/* Retrieves output formatted like the example below.
-	 * 
-	 * PS > Get-NetIPAddress -InterfaceIndex 9 -AddressFamily IPv4 | Format-Table -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin
-	 * 
-	 * IPAddress     AddressState PrefixOrigin SuffixOrigin
-	 * ---------     ------------ ------------ ------------
-	 * 192.168.1.217    Preferred         Dhcp         Dhcp
-	 */
-
-	let commands = Array.from(this.setupCommands)
-	commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.interfaceIndex} -AddressFamily ${connection.hasIpv4 ? 'IPv4' : 'IPv6'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
-	let listText = ''
-	try {
-		listText = await runPowershell(commands);
-	} catch (error) {
-		throw(`readIpAddress: ${error}`);
+		return null
 	}
 
-	// define columns
-	const columnNames = ['IPAddress', 'AddressState', 'PrefixOrigin', 'SuffixOrigin']
-	const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
-
-	let foundHeader = false
-	for (let line of listText.split('\n')) {
-		if (!columns[0].endPos) {
-			if(line.indexOf('-----') >= 0) {
-				this.readColumns(columns, line)
-			} else {
-				continue
-			}
-		} else {
-			debug(`readIpAddress: ${line}`)
-			let index = columnNames.indexOf('IPAddress')
-			const ipAddress = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			if (!ipAddress) {
-				// Probably a blank line at end of output
-				continue
-			}
-			// Ensure address state is valid before saving the address.
-			index = columnNames.indexOf('AddressState')
-			const addressState = line.substring(columns[index].startPos, columns[index].endPos)
-			if (INVALID_ADDRESS_STATES.includes(addressState)) {
-				continue
-			}
-			connection.ipAddress = ipAddress
-			index = columnNames.indexOf('PrefixOrigin')
-			const prefixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			index = columnNames.indexOf('SuffixOrigin')
-			const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			connection.isManualAddress = (prefixOrigin == 'Manual' || suffixOrigin == 'Manual')
-			if (connection.isManualAddress) {
-				debug(`IP address ${ipAddress} generated manually`)
-			}
+	/** Sends a ping request to balena API. Returns true on success. */
+	private async pingApi(connection: NetConnectivity): Promise<boolean> {
+		const options = {
+			localAddress: connection.ipAddress
 		}
+		debug(`pingApi: sending request from address ${options.localAddress}`)
+		const response = await got('https://api.balena-cloud.com/ping')
+		debug(`pingApi: response code: ${response.statusCode}`)
+		return response.statusCode == 200
 	}
-}
 
-/** 
- * Queries for the active network connection, if any, for each profile in the 
- * provided Map. Uses INVALID_CONNECTIVITY_MODES to qualify connection state
- * for IPv4 (hasIpv4) and IPv6 (hasIpv6). Generates a map that associates a 
- * profile with the network connection.
- *
- * @return Map of NetConnection found, keyed on profile name; empty if none
- */
-const readNetAdapters = async (profiles: Map<string,ConnectionProfile>, connections: Map<string,NetConnection>): Promise<void> => {
-	/* Retrieves output formatted like the example below.
-	 * 
-	 * PS > Get-NetAdapter | Format-Table -Property ifIndex, PhysicalMediaType, MediaConnectionState
-	 * 
-	 * ifIndex PhysicalMediaType MediaConnectionState
-	 * ------- ----------------- --------------------
-	 *      13 802.3                        Connected
-	 *      12 BlueTooth                 Disconnected
-	 *       9 Native 802.11                Connected
+	/** 
+	 * Reads the IP address for a network connection and updates the connection object 
+	 * with this value. The connection must have either IPv4 or IPv6 connectivity.
+	 * Prefers IPv4 address if connection has both IPv4 and IPv6 connectivity. Also 
+	 * validates reported state of address via INVALID_ADDRESS_STATES.
 	 */
+	private async readIpAddress(connection: NetConnectivity): Promise<void> {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetIPAddress -InterfaceIndex 9 -AddressFamily IPv4 | Format-Table -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin
+		 * 
+		 * IPAddress     AddressState PrefixOrigin SuffixOrigin
+		 * ---------     ------------ ------------ ------------
+		 * 192.168.1.217    Preferred         Dhcp         Dhcp
+		 */
 
-	let commands = Array.from(this.setupCommands)
-	commands.push(`Get-NetAdapter ${PWSH_FORMAT_TABLE} -Property ifIndex, PhysicalMediaType, MediaConnectionState ${PWSH_OUTPUT_WIDTH}`)
-	let listText = ''
-	try {
-		listText = await runPowershell(commands);
-	} catch (error) {
-		throw(`readNetAdapters: ${error}`);
-	}
+		let commands:string[] = []
+		commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.ifaceId} -AddressFamily ${connection.hasIpv4 ? 'IPv4' : 'IPv6'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readIpAddress: ${error}`);
+		}
 
-	// define columns
-	const columnNames = ['ifIndex', 'PhysicalMediaType', 'MediaConnectionState']
-	const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+		// define columns
+		const columnNames = ['IPAddress', 'AddressState', 'PrefixOrigin', 'SuffixOrigin']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
 
-	let foundHeader = false
-	for (let line of listText.split('\n')) {
-		if (!columns[0].endPos) {
-			if(line.indexOf('-----') >= 0) {
-				this.readColumns(columns, line)
-			} else {
-				continue
-			}
-		} else {
-			// Find connection
-			let index = columnNames.indexOf('ifIndex')
-			const ifIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			if (!ifIndex) {
-				continue
-			}
-			const connection = connections.get(ifIndex)
-			if (connection == undefined) {
-				debug(`readNetAdapters: Can't find interfaceIndex named ${ifIndex}`)
-				continue
-			}
-
-			debug(`readNetAdapters: ${line}`)
-			index = columnNames.indexOf('PhysicalMediaType')
-			const mediaType = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			index = columnNames.indexOf('MediaConnectionState')
-			const connectionState = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			const isConnected = (connectionState == 'Connected')
-
-			if (isConnected && mediaType.includes('802.11')) {
-				connection.connectionType = 'wifi'
-				// find profile
-				const profile = profiles.get(connection.name)
-				if (profile == undefined) {
-					debug(`readNetAdapters: Can't find profile named ${connection.name}`)
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					readColumns(columns, line)
+				} else {
 					continue
 				}
-				profile.interfaceId = ifIndex
-			}
-		}
-	}
-}
-
-/** 
- * Queries for the active network connection, if any, for each profile in the 
- * provided Map. Uses INVALID_CONNECTIVITY_MODES to qualify connection state
- * for IPv4 (hasIpv4) and IPv6 (hasIpv6). Generates a map that associates a 
- * profile with the network connection.
- *
- * @return Map of NetConnection found, keyed on profile name; empty if none
- */
-const readNetConnections = async (): Promise<Map<string,NetConnection>> => {
-	/* Retrieves output formatted like the example below.
-	 * 
-	 * PS > Get-NetConnectionProfile | Format-Table -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity
-	 * 
-	 * Name      InterfaceIndex IPv4Connectivity IPv6Connectivity
-	 * ----      -------------- ---------------- ----------------
-	 * gal47lows              9         Internet        NoTraffic
-	 */
-
-	let commands = Array.from(this.setupCommands)
-	commands.push(`Get-NetConnectionProfile ${PWSH_FORMAT_TABLE} -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity ${PWSH_OUTPUT_WIDTH}`)
-	let listText = ''
-	try {
-		listText = await runPowershell(commands);
-	} catch (error) {
-		throw(`readNetConnections: ${error}`);
-	}
-
-	// define columns
-	const columnNames = ['Name', 'InterfaceIndex', 'IPv4Connectivity', 'IPv6Connectivity']
-	const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
-
-	let connections = new Map<string, NetConnection>()
-
-	let foundHeader = false
-	for (let line of listText.split('\n')) {
-		if (!columns[0].endPos) {
-			if(line.indexOf('-----') >= 0) {
-				this.readColumns(columns, line)
 			} else {
-				continue
+				debug(`readIpAddress: ${line}`)
+				let index = columnNames.indexOf('IPAddress')
+				const ipAddress = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!ipAddress) {
+					// Probably a blank line at end of output
+					continue
+				}
+				// Ensure address state is valid before saving the address.
+				index = columnNames.indexOf('AddressState')
+				const addressState = line.substring(columns[index].startPos, columns[index].endPos)
+				if (INVALID_ADDRESS_STATES.includes(addressState)) {
+					continue
+				}
+				connection.ipAddress = ipAddress
+				index = columnNames.indexOf('PrefixOrigin')
+				const prefixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				index = columnNames.indexOf('SuffixOrigin')
+				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.isManualAddress = (prefixOrigin == 'Manual' || suffixOrigin == 'Manual')
+				if (connection.isManualAddress) {
+					debug(`IP address ${ipAddress} generated manually`)
+				}
 			}
-		} else {
-			let connection = {name: name, connectionType: '', interfaceId: '', hasIpv4: false, hasIpv6: false, ipAddress: '', isManualAddress: false }
-			debug(`readNetConnections: ${line}`)
-			let index = columnNames.indexOf('Name')
-			const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			if (!name) {
-				// name is blank
-				continue
-			}
-			index = columnNames.indexOf('InterfaceIndex')
-			const interfaceIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			connection.interfaceId = interfaceIndex
-			index = columnNames.indexOf('IPv4Connectivity')
-			const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			connection.hasIpv4 = !INVALID_CONNECTIVITY_MODES.includes(ipv4Connectivity)
-			index = columnNames.indexOf('IPv6Connectivity')
-			const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
-			connection.hasIpv6 = !INVALID_CONNECTIVITY_MODES.includes(ipv6Connectivity)
-			connections.set(interfaceIndex, connection)
 		}
 	}
-	return connections
-}
 
+	/** 
+	 * Uses the interface index to correlate a connection/interface/adapter to 
+	 * a connection profile. Determines the type of interface -- WiFi or Ethernet.
+	 * Updates internal 'connMap' and 'profiles'.
+	 * Disregards interfaces that are not connected currently.
+	 */
+	private async readNetAdapters(): Promise<void> {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetAdapter | Format-Table -Property ifIndex, PhysicalMediaType, MediaConnectionState
+		 * 
+		 * ifIndex PhysicalMediaType MediaConnectionState
+		 * ------- ----------------- --------------------
+		 *      13 802.3                        Connected
+		 *      12 BlueTooth                 Disconnected
+		 *       9 Native 802.11                Connected
+		 */
+
+		let commands:string[] = []
+		commands.push(`Get-NetAdapter ${PWSH_FORMAT_TABLE} -Property ifIndex, PhysicalMediaType, MediaConnectionState ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readNetAdapters: ${error}`);
+		}
+
+		// define columns
+		const columnNames = ['ifIndex', 'PhysicalMediaType', 'MediaConnectionState']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					readColumns(columns, line)
+				} else {
+					continue
+				}
+			} else {
+				// Find connection
+				let index = columnNames.indexOf('ifIndex')
+				const ifIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!ifIndex) {
+					continue
+				}
+				index = columnNames.indexOf('MediaConnectionState')
+				const connectionState = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				const isConnected = (connectionState == 'Connected')
+				if (!isConnected) {
+					debug(`readNetAdapters: Not considering unconnected interfaceIndex ${ifIndex}`)
+				}
+				const connection = this.connMap.get(ifIndex)
+				if (connection == undefined) {
+					debug(`readNetAdapters: Can't find interfaceIndex ${ifIndex}`)
+					continue
+				}
+
+				debug(`readNetAdapters: ${line}`)
+				index = columnNames.indexOf('PhysicalMediaType')
+				const mediaType = line.substring(columns[index].startPos, columns[index].endPos).trim()
+
+				let profile: ConnectionProfile | undefined
+				if (mediaType.includes('802.11')) {
+					connection.ifaceType = 'wifi'
+					profile = this.profiles.find(p => p.name == connection.profileName && p.wifiSsid)
+					if (profile == undefined) {
+						debug(`readNetAdapters: Can't find profile named ${connection.profileName} for wifi`)
+						continue
+					}
+					profile.ifaceId = ifIndex
+
+				} else if (mediaType.includes('802.3')) {
+					connection.ifaceType = 'ethernet'
+					profile = this.profiles.find(p => p.name == connection.profileName && !p.wifiSsid)
+					if (profile) {
+						debug(`readNetAdapters: Profile named ${connection.profileName} for ethernet already exists`)
+						continue
+					}
+					profile = { name: connection.profileName, ifaceId: ifIndex, wifiSsid: '', wifiKey: ''}
+					this.profiles.push(profile)
+				}
+			}
+		}
+	}
+
+	/** 
+	 * Queries for active network connections, and adds them to this object's 'connMap'
+	 */
+	private async readNetConnections(): Promise<void> {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetConnectionProfile | Format-Table -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity
+		 * 
+		 * Name      InterfaceIndex IPv4Connectivity IPv6Connectivity
+		 * ----      -------------- ---------------- ----------------
+		 * gal47lows              9         Internet        NoTraffic
+		 */
+
+		let commands:string[] = []
+		commands.push(`Get-NetConnectionProfile ${PWSH_FORMAT_TABLE} -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readNetConnections: ${error}`);
+		}
+
+		// define columns
+		const columnNames = ['Name', 'InterfaceIndex', 'IPv4Connectivity', 'IPv6Connectivity']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					readColumns(columns, line)
+				} else {
+					continue
+				}
+			} else {
+				debug(`readNetConnections: ${line}`)
+				let index = columnNames.indexOf('Name')
+				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!name) {
+					// name is blank
+					continue
+				}
+				let connection = {ifaceType: '', ifaceId: '', profileName: name, hasIpv4: false, hasIpv6: false, ipAddress: '', isManualAddress: false }
+				index = columnNames.indexOf('InterfaceIndex')
+				const ifaceIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.ifaceId = ifaceIndex
+				index = columnNames.indexOf('IPv4Connectivity')
+				const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.hasIpv4 = !INVALID_CONNECTIVITY_MODES.includes(ipv4Connectivity)
+				index = columnNames.indexOf('IPv6Connectivity')
+				const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.hasIpv6 = !INVALID_CONNECTIVITY_MODES.includes(ipv6Connectivity)
+				this.connMap.set(ifaceIndex, connection)
+			}
+		}
+	}
+}

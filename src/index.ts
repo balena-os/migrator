@@ -2,14 +2,16 @@ import {run, Args, Command, Flags} from '@oclif/core';
 // Must use CommonJS version of inquirer due to limitations of vercel/pkg.
 import * as inquirer from 'inquirer';
 import { migrator } from '@kb2ma/etcher-sdk';
-import { collectProfiles } as analyzer from './networking-analyzer.spec'
+import { Analyzer, ConnectionProfile } from './networking-analyzer.spec'
 
+/*
 interface MigrateOptions {
 	// don't perform these tasks; comma separated list like 'bootloader,reboot'
 	omitTasks: string;
 	// WiFi profiles to write to boot partition
-	wifiProfiles: wifiProfileReader.WifiProfile[]
+	wifiProfiles: ConnectionProfile[]
 }
+*/
 
 export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
@@ -93,17 +95,23 @@ export default class Migrator extends Command {
 				throw Error(`last-task option '${flags['last-task']}' not understood`)
 			}
 		}
-		let options:MigrateOptions = { omitTasks: flags['skip-tasks'], wifiProfiles: []}
+		let options:migrator.MigrateOptions = { omitTasks: flags['skip-tasks'], wifiProfiles: []}
 
-		// Check for WiFi networks to be configured.
+		// Run a networking analyzer
 		const psInstallPath = `${process.cwd()}\\modules`
-		const profiles = await analyzer.collectProfiles(psInstallPath)
-		console.log(`Found profiles: ${profiles.length ? profiles.map(p => " " + p.name) : "<none>"}`)
-		const pinged = profiles.find(p => p.pingedBalenaApi)
-		if (!pinged) {
-			throw Error("balena API not reachable from any profile")
+		const analyzer = new Analyzer(psInstallPath)
+		await analyzer.run()
+		// Collect WiFi profiles
+		const profiles = analyzer.getProfiles().filter(p => p.wifiSsid)
+		console.log(`Found WiFi profiles: ${profiles.length ? profiles.map(p => " " + p.name) : "<none>"}`)
+		profiles.forEach(p => options.wifiProfiles.push({name: p.name, ssid: p.wifiSsid, key: p.wifiKey}))
+
+		// Verify at least one network interface can ping balena API.
+		const connection = await analyzer.testApiConnectivity()
+		if (!connection) {
+			throw Error("balena API not reachable from any connected interface")
 		}
-		console.log(`balena API is reachable from profile ${pinged.name}\n`)
+		console.log(`balena API is reachable from ${connection.profileName} (${connection.ifaceType})\n`)
 
 		//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
 		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)

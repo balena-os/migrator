@@ -52,15 +52,15 @@ export class ProfileReader {
 		// First get map of profile names and keys, and populate SSID.
 		const profiles = await this.readProfiles()
 		await this.readAvailableSsid(profiles)
-		// If WiFi network for a profile is not available, assume SSID will match profile name.
+		// If WiFi network for a profile is not available, assume SSID matches profile name.
 		for (let p of profiles.values()) {
-			if (!p.ssid) {
-				p.ssid = p.name
+			if (!p.wifiSsid) {
+				p.wifiSsid = p.name
 			}
 		}
 
-		// convert iterator to array
-		const pArray:WifiProfile[] = []
+		// convert map iterator to array
+		const pArray:ConnectionProfile[] = []
 		profiles.forEach((value,key,map) => {pArray.push(value)})
 		return pArray
 	}
@@ -69,7 +69,7 @@ export class ProfileReader {
 	 * Reads the SSID from available WiFi networks for each profile in the provided list 
 	 * and updates the ssid property.
 	 */
-	private async readAvailableSsid(profiles: Map<string,ConnectionProfile>) {
+	private async readAvailableSsid(profileMap: Map<string,ConnectionProfile>) {
 		/* Retrieves output formatted like the example below.
 		 *
 		 *  > Get-WiFiAvailableNetwork
@@ -96,7 +96,7 @@ export class ProfileReader {
 		for (let line of listText.split('\n')) {
 			if (!columns[0].endPos) {
 				if(line.indexOf('-----') >= 0) {
-					this.readColumns(columns, line)
+					readColumns(columns, line)
 				} else {
 					continue
 				}
@@ -108,7 +108,7 @@ export class ProfileReader {
 					// name is blank
 					continue
 				}
-				const profile = profiles.get(name)
+				const profile = profileMap.get(name)
 				if (profile == undefined) {
 					debug(`readAvailableSsid: Can't find profile for profile ${name}`)
 					continue
@@ -117,7 +117,7 @@ export class ProfileReader {
 				debug(`readAvailableSsid: ${line}`)
 				index = columnNames.indexOf('SSID')
 				const ssid = line.substring(columns[index].startPos, columns[index].endPos).trim()
-				profile.ssid = ssid
+				profile.wifiSsid = ssid
 			}
 		}
 	}
@@ -152,16 +152,16 @@ export class ProfileReader {
 		const columnNames = ['ProfileName', 'ConnectionMode', 'Authentication', 'Encryption', 'Password']
 		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
 
-		let profiles = new Map<string, WifiProfile>()
+		let profileMap = new Map<string, ConnectionProfile>()
 		for (let line of listText.split('\n')) {
 			if (!columns[0].endPos) {
 				if(line.indexOf('-----') >= 0) {
-					this.readColumns(columns, line)
+					readColumns(columns, line)
 				} else {
 					continue
 				}
 			} else {
-				let profile:ConnectionProfile = { name: '', interfaceId: '', wifiSsid: '', wifiKey: '', pingedBalenaApi: false}
+				let profile:ConnectionProfile = { name: '', wifiSsid: '', wifiKey: '', ifaceId: ''}
 				let index = columnNames.indexOf('ProfileName')
 				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (!name) {
@@ -173,20 +173,20 @@ export class ProfileReader {
 				index = columnNames.indexOf('Authentication')
 				const auth = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (VALID_AUTH_MODES.includes(auth)) {
-					debug(`readWifiProfiles: ${line}`)
+					debug(`readWifiprofileMap: ${line}`)
 					index = columnNames.indexOf('Password')
 					const password = line.substring(columns[index].startPos, columns[index].endPos).trim()
-					profile.key = password
-					if (!profile.key && !KEYLESS_AUTH_MODES.includes(auth)) {
+					profile.wifiKey = password
+					if (!profile.wifiKey && !KEYLESS_AUTH_MODES.includes(auth)) {
 						console.log(`Rejected WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
 					} else {
-						profiles.set(profile.name, profile)
+						profileMap.set(profile.name, profile)
 					}
 				} else {
 					console.log(`Rejected WiFi profile ${profile.name} with auth ${auth}`)
 				}
 			}
 		}
-		return profiles
+		return profileMap
 	}
 }
