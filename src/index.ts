@@ -2,7 +2,7 @@ import {run, Args, Command, Flags} from '@oclif/core';
 // Must use CommonJS version of inquirer due to limitations of vercel/pkg.
 import * as inquirer from 'inquirer';
 import { migrator } from '@kb2ma/etcher-sdk';
-import * as wifiProfileReader from './wifi-profile-reader.spec'
+import { collectProfiles } as analyzer from './networking-analyzer.spec'
 
 interface MigrateOptions {
 	// don't perform these tasks; comma separated list like 'bootloader,reboot'
@@ -97,10 +97,9 @@ export default class Migrator extends Command {
 
 		// Check for WiFi networks to be configured.
 		const psInstallPath = `${process.cwd()}\\modules`
-		const wifiReader = new wifiProfileReader.ProfileReader(psInstallPath)
-		const wifiProfiles = await wifiReader.collectWifiProfiles()
-		console.log(`Found WiFi profiles: ${wifiProfiles.length ? wifiProfiles.map(p => " " + p.name) : "<none>"}`)
-		const pinged = wifiProfiles.find(p => p.pingedBalenaApi)
+		const profiles = await analyzer.collectProfiles(psInstallPath)
+		console.log(`Found profiles: ${profiles.length ? profiles.map(p => " " + p.name) : "<none>"}`)
+		const pinged = profiles.find(p => p.pingedBalenaApi)
 		if (!pinged) {
 			throw Error("balena API not reachable from any profile")
 		}
