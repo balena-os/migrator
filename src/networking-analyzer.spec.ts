@@ -34,6 +34,8 @@ const VALID_AUTH_MODES = ['WPAPSK', 'WPA2PSK', 'WPA3SAE', 'open', 'OWE']
 const KEYLESS_AUTH_MODES = ['open', 'OWE']
 const INVALID_CONNECTIVITY_MODES = ['Disconnected', 'NoTraffic']
 const INVALID_ADDRESS_STATES = ['Duplicate', 'Invalid']
+/** Includes IPv6 fe80:, which is not routable. */
+const INVALID_PREFIX_ORIGINS = ['WellKnown']
 
 // This code provides a wrapper around the Windows Powershell WiFiProfileManagement 
 // module (https://github.com/jcwalker/WiFiProfileManagement) to retrieve profile
@@ -68,6 +70,7 @@ export const runPowershell = async (commands: string[]): Promise<string> => {
 		return '';
 	}
 	let output = {stdout: '', stderr: ''};
+	debug(`Powershell: ${commands.length ? commands[commands.length-1] : "none"}`)
 	await tmp.withTmpFile({ keepOpen: false, postfix: '.ps1' }, async (file: tmp.TmpFileResult) => {
 		await fs.writeFile(file.path, commands.join('\r\n'));
 		await withExecMutex(async () => {
@@ -148,13 +151,13 @@ export const readColumns = (columns:Column[] = [], line = ''): void => {
 			if (i == columns.length - 1) {
 				// last column
 				columns[i].endPos = line.length
-				debug(`readColumns: col ${i}: ${columns[i].startPos}, ${columns[i].endPos}`)
+				//debug(`readColumns: col ${i}: ${columns[i].startPos}, ${columns[i].endPos}`)
 			} else {
 				throw Error(`readColumns: Only found ${i} columns.`)
 			}
 		} else {
 			columns[i].endPos = linePos
-			debug(`readColumns: col ${i}: ${columns[i].startPos}, ${columns[i].endPos}`)
+			//debug(`readColumns: col ${i}: ${columns[i].startPos}, ${columns[i].endPos}`)
 			linePos += 1 // advance past space to next column
 		}
 	}
@@ -297,11 +300,18 @@ export class Analyzer {
 				connection.ipAddress = ipAddress
 				index = columnNames.indexOf('PrefixOrigin')
 				const prefixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (INVALID_PREFIX_ORIGINS.includes(prefixOrigin)) {
+					continue
+				}
+
 				index = columnNames.indexOf('SuffixOrigin')
 				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				connection.isManualAddress = (prefixOrigin == 'Manual' || suffixOrigin == 'Manual')
 				if (connection.isManualAddress) {
 					debug(`IP address ${ipAddress} generated manually`)
+				} else {
+					// May be multiple addresses; just use the first acceptable one.
+					break
 				}
 			}
 		}
