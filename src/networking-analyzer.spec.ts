@@ -241,9 +241,15 @@ export class Analyzer {
 			localAddress: connection.ipAddress
 		}
 		debug(`pingApi: sending request from address ${options.localAddress}`)
-		const response = await got('https://api.balena-cloud.com/ping')
-		debug(`pingApi: response code: ${response.statusCode}`)
-		return response.statusCode == 200
+
+		try {
+			const response = await got('https://api.balena-cloud.com/ping', options)
+			debug(`pingApi: response code: ${response.statusCode}`)
+			return response.statusCode == 200
+		} catch (error) {
+			console.log(`balena API not reachable from ${connection.profileName} (${connection.ifaceType}): ${error}`)
+			return false
+		}
 	}
 
 	/** 
@@ -263,7 +269,7 @@ export class Analyzer {
 		 */
 
 		let commands:string[] = []
-		commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.ifaceId} -AddressFamily ${connection.hasIpv4 ? 'IPv4' : 'IPv6'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.ifaceId} -AddressFamily ${connection.hasIpv6 ? 'IPv6' : 'IPv4'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
