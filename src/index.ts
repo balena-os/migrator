@@ -4,15 +4,6 @@ import * as inquirer from 'inquirer';
 import { migrator } from '@kb2ma/etcher-sdk';
 import { Analyzer, ConnectionProfile } from './networking-analyzer.spec'
 
-/*
-interface MigrateOptions {
-	// don't perform these tasks; comma separated list like 'bootloader,reboot'
-	omitTasks: string;
-	// WiFi profiles to write to boot partition
-	wifiProfiles: ConnectionProfile[]
-}
-*/
-
 export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
 
@@ -95,7 +86,7 @@ export default class Migrator extends Command {
 				throw Error(`last-task option '${flags['last-task']}' not understood`)
 			}
 		}
-		let options:migrator.MigrateOptions = { omitTasks: flags['skip-tasks'], wifiProfiles: []}
+		let options:migrator.MigrateOptions = { omitTasks: flags['skip-tasks'], connectionProfiles: []}
 
 		// Run a networking analyzer
 		const psInstallPath = `${process.cwd()}\\modules`
@@ -104,7 +95,7 @@ export default class Migrator extends Command {
 		// Collect WiFi profiles
 		const profiles = analyzer.getProfiles().filter(p => p.wifiSsid)
 		console.log(`Found WiFi profiles: ${profiles.length ? profiles.map(p => " " + p.name) : "<none>"}`)
-		profiles.forEach(p => options.wifiProfiles.push({name: p.name, ssid: p.wifiSsid, key: p.wifiKey}))
+		profiles.forEach(p => options.connectionProfiles.push(p))
 
 		// Verify at least one network interface can ping balena API.
 		const connection = await analyzer.testApiConnectivity()
