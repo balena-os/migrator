@@ -1,7 +1,8 @@
 import {run, Args, Command, Flags} from '@oclif/core';
 // Must use CommonJS version of inquirer due to limitations of vercel/pkg.
 import * as inquirer from 'inquirer';
-import { migrator } from 'etcher-sdk';
+import { migrator } from '@kb2ma/etcher-sdk';
+import { Analyzer, ConnectionProfile } from './networking-analyzer.spec'
 
 export default class Migrator extends Command {
 	static description = 'Migrate this device to balenaOS';
@@ -29,7 +30,7 @@ export default class Migrator extends Command {
 		'last-task': Flags.string({
 			// See etcher-sdk migrate() function for list of valid tasks.
 			// Presently this option is for development/debugging only.
-			// Tasks are executed in order, 'analyze,shrink,copy,bootloader,reboot'.
+			// Tasks are executed in order, 'analyze,shrink,copy,config,bootloader,reboot'.
 			default: '',
 			hidden: true,
 			exclusive: ['skip-tasks'],
@@ -74,7 +75,7 @@ export default class Migrator extends Command {
 		if (flags['last-task']) {
 			// Migrator API requires skip-tasks, so convert. Build list from last to first.
 			let foundTask = false
-			for (const task of ['reboot', 'bootloader', 'copy', 'shrink', 'analyze']) {
+			for (const task of ['reboot', 'bootloader', 'config', 'copy', 'shrink', 'analyze']) {
 				if (flags['last-task'] == task) {
 					foundTask = true
 					break
@@ -85,8 +86,18 @@ export default class Migrator extends Command {
 				throw Error(`last-task option '${flags['last-task']}' not understood`)
 			}
 		}
-		const options = { omitTasks: flags['skip-tasks'] }
+		let options:migrator.MigrateOptions = { omitTasks: flags['skip-tasks'], connectionProfiles: []}
 
+		// Run a networking analyzer
+		const psInstallPath = `${process.cwd()}\\modules`
+		const analyzer = new Analyzer(psInstallPath)
+		await analyzer.run()
+		// Collect WiFi profiles
+		const profiles = analyzer.getProfiles().filter(p => p.wifiSsid)
+		console.log(`Found WiFi profiles: ${profiles.length ? profiles.map(p => " " + p.name) : "<none>"}`)
+		profiles.forEach(p => options.connectionProfiles.push(p))
+
+		//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
 		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
 			.then(console.log)
 			.catch(console.log);
