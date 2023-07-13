@@ -97,6 +97,13 @@ export default class Migrator extends Command {
 		console.log(`Found WiFi profiles: ${profiles.length ? profiles.map(p => " " + p.name) : "<none>"}`)
 		profiles.forEach(p => options.connectionProfiles.push(p))
 
+		// Verify at least one network interface can ping balena API.
+		const connection = await analyzer.testApiConnectivity()
+		if (!connection) {
+			throw Error("balena API not reachable from any connected interface")
+		}
+		console.log(`balena API is reachable from ${connection.profileName} (${connection.ifaceType})\n`)
+
 		//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
 		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
 			.then(console.log)

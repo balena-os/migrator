@@ -104,6 +104,26 @@ export interface ConnectionProfile {
 }
 
 /** 
+ * Attributes of a network adapter/interface/connection useful for testing connectivity.
+ * 'ifaceType' categorizes the connection; 'wifi' or 'ethernet'.
+ * 'ifaceId' provides a unique handle for an adapter/interface.
+ * 'profileName' provides a Windows name for an active connection; uses same name as WiFi ssid
+ * 'hasIpv4' if connection is using IPv4 networking
+ * 'hasIpv6' if connection is using IPv6 networking
+ * 'ipAddress' used by a connection
+ * 'isManualAddress' if address was assigned manually
+ */
+interface NetConnectivity {
+	ifaceType: string;
+	ifaceId: string;
+	profileName: string;
+	hasIpv4: boolean;
+	hasIpv6: boolean;
+	ipAddress: string;
+	isManualAddress: boolean;
+}
+
+/** 
  * Describes a column in a Powershell table. Positions refer to offset in a given 
  * line of the table.
  */
@@ -154,6 +174,8 @@ export const readColumns = (columns:Column[] = [], line = ''): void => {
  *   const connection = await analyzer.testApiConnectivity()
  */
 export class Analyzer {
+	/** Map keyed on interface ID */
+	private connMap: Map<string,NetConnectivity> = new Map<string,NetConnectivity>()
 	private profiles: ConnectionProfile[] = []
 	private psModulePath = ''
 
@@ -172,6 +194,11 @@ export class Analyzer {
 	public async run(): Promise<void> {
 		const wifiReader = new wifiProfileReader.ProfileReader(this.psModulePath)
 		this.profiles = await wifiReader.collectProfiles()
+
+		this.connMap = new Map<string, NetConnectivity>()
+		// Must call these helper functions in this order.
+		await this.readNetConnections()
+		await this.readNetAdapters()
 	}
 
 	/**
@@ -183,5 +210,259 @@ export class Analyzer {
 	 */
 	public getProfiles(): ConnectionProfile[] {
 		return this.profiles
+	}
+
+	/**
+	 * Validates that at least one currently connected network interface can ping 
+	 * balena API.
+	 *
+	 * @return Connection used to reach the API
+	 */
+	public async testApiConnectivity(): Promise<NetConnectivity | null> {
+		for (let connection of this.connMap.values()) {
+			if (connection.hasIpv4 || connection.hasIpv6) {
+				await this.readIpAddress(connection)
+				// Not presently accepting manually generated IP addresses
+				if (connection.ipAddress && !connection.isManualAddress) {
+					const pingOk = await this.pingApi(connection)
+					if (pingOk) {
+						// Only require ping to one connection
+						return connection
+					}
+				}
+			}
+		}
+		return null
+	}
+
+	/** Sends a ping request to balena API. Returns true on success. */
+	private async pingApi(connection: NetConnectivity): Promise<boolean> {
+		const options = {
+			localAddress: connection.ipAddress
+		}
+		debug(`pingApi: sending request from address ${options.localAddress}`)
+
+		try {
+			const response = await got('https://api.balena-cloud.com/ping', options)
+			debug(`pingApi: response code: ${response.statusCode}`)
+			return response.statusCode == 200
+		} catch (error) {
+			console.log(`balena API not reachable from ${connection.profileName} (${connection.ifaceType}): ${error}`)
+			return false
+		}
+	}
+
+	/** 
+	 * Reads the IP address for a network connection and updates the connection object 
+	 * with this value. The connection must have either IPv4 or IPv6 connectivity.
+	 * Prefers IPv4 address if connection has both IPv4 and IPv6 connectivity. Also 
+	 * validates reported state of address via INVALID_ADDRESS_STATES.
+	 */
+	private async readIpAddress(connection: NetConnectivity): Promise<void> {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetIPAddress -InterfaceIndex 9 -AddressFamily IPv4 | Format-Table -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin
+		 * 
+		 * IPAddress     AddressState PrefixOrigin SuffixOrigin
+		 * ---------     ------------ ------------ ------------
+		 * 192.168.1.217    Preferred         Dhcp         Dhcp
+		 */
+
+		let commands:string[] = []
+		commands.push(`Get-NetIPAddress -InterfaceIndex ${connection.ifaceId} -AddressFamily ${connection.hasIpv6 ? 'IPv6' : 'IPv4'}  ${PWSH_FORMAT_TABLE} -Property IPAddress, AddressState, PrefixOrigin, SuffixOrigin ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readIpAddress: ${error}`);
+		}
+
+		// define columns
+		const columnNames = ['IPAddress', 'AddressState', 'PrefixOrigin', 'SuffixOrigin']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					readColumns(columns, line)
+				} else {
+					continue
+				}
+			} else {
+				debug(`readIpAddress: ${line}`)
+				let index = columnNames.indexOf('IPAddress')
+				const ipAddress = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!ipAddress) {
+					// Probably a blank line at end of output
+					continue
+				}
+				// Ensure address state is valid before saving the address.
+				index = columnNames.indexOf('AddressState')
+				const addressState = line.substring(columns[index].startPos, columns[index].endPos)
+				if (INVALID_ADDRESS_STATES.includes(addressState)) {
+					continue
+				}
+				connection.ipAddress = ipAddress
+				index = columnNames.indexOf('PrefixOrigin')
+				const prefixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (INVALID_PREFIX_ORIGINS.includes(prefixOrigin)) {
+					continue
+				}
+
+				index = columnNames.indexOf('SuffixOrigin')
+				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.isManualAddress = (prefixOrigin == 'Manual' || suffixOrigin == 'Manual')
+				if (connection.isManualAddress) {
+					debug(`IP address ${ipAddress} generated manually`)
+				} else {
+					// May be multiple addresses; just use the first acceptable one.
+					break
+				}
+			}
+		}
+	}
+
+	/** 
+	 * Uses the interface index to correlate a connection/interface/adapter to 
+	 * a connection profile. Determines the type of interface -- WiFi or Ethernet.
+	 * Updates internal 'connMap' and 'profiles'.
+	 * Disregards interfaces that are not connected currently.
+	 */
+	private async readNetAdapters(): Promise<void> {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetAdapter | Format-Table -Property ifIndex, PhysicalMediaType, MediaConnectionState
+		 * 
+		 * ifIndex PhysicalMediaType MediaConnectionState
+		 * ------- ----------------- --------------------
+		 *      13 802.3                        Connected
+		 *      12 BlueTooth                 Disconnected
+		 *       9 Native 802.11                Connected
+		 */
+
+		let commands:string[] = []
+		commands.push(`Get-NetAdapter ${PWSH_FORMAT_TABLE} -Property ifIndex, PhysicalMediaType, MediaConnectionState ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readNetAdapters: ${error}`);
+		}
+
+		// define columns
+		const columnNames = ['ifIndex', 'PhysicalMediaType', 'MediaConnectionState']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					readColumns(columns, line)
+				} else {
+					continue
+				}
+			} else {
+				// Find connection
+				let index = columnNames.indexOf('ifIndex')
+				const ifIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!ifIndex) {
+					continue
+				}
+				index = columnNames.indexOf('MediaConnectionState')
+				const connectionState = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				const isConnected = (connectionState == 'Connected')
+				if (!isConnected) {
+					debug(`readNetAdapters: Not considering unconnected interfaceIndex ${ifIndex}`)
+				}
+				const connection = this.connMap.get(ifIndex)
+				if (connection == undefined) {
+					debug(`readNetAdapters: Can't find interfaceIndex ${ifIndex}`)
+					continue
+				}
+
+				debug(`readNetAdapters: ${line}`)
+				index = columnNames.indexOf('PhysicalMediaType')
+				const mediaType = line.substring(columns[index].startPos, columns[index].endPos).trim()
+
+				let profile: ConnectionProfile | undefined
+				if (mediaType.includes('802.11')) {
+					connection.ifaceType = 'wifi'
+					profile = this.profiles.find(p => p.name == connection.profileName && p.wifiSsid)
+					if (profile == undefined) {
+						debug(`readNetAdapters: Can't find profile named ${connection.profileName} for wifi`)
+						continue
+					}
+					profile.ifaceId = ifIndex
+
+				} else if (mediaType.includes('802.3')) {
+					connection.ifaceType = 'ethernet'
+					profile = this.profiles.find(p => p.name == connection.profileName && !p.wifiSsid)
+					if (profile) {
+						debug(`readNetAdapters: Profile named ${connection.profileName} for ethernet already exists`)
+						continue
+					}
+					profile = { name: connection.profileName, ifaceId: ifIndex, wifiSsid: '', wifiKey: ''}
+					this.profiles.push(profile)
+				}
+			}
+		}
+	}
+
+	/** 
+	 * Queries for active network connections, and adds them to this object's 'connMap'
+	 */
+	private async readNetConnections(): Promise<void> {
+		/* Retrieves output formatted like the example below.
+		 * 
+		 * PS > Get-NetConnectionProfile | Format-Table -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity
+		 * 
+		 * Name      InterfaceIndex IPv4Connectivity IPv6Connectivity
+		 * ----      -------------- ---------------- ----------------
+		 * gal47lows              9         Internet        NoTraffic
+		 */
+
+		let commands:string[] = []
+		commands.push(`Get-NetConnectionProfile ${PWSH_FORMAT_TABLE} -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity ${PWSH_OUTPUT_WIDTH}`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readNetConnections: ${error}`);
+		}
+
+		// define columns
+		const columnNames = ['Name', 'InterfaceIndex', 'IPv4Connectivity', 'IPv6Connectivity']
+		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
+
+		let foundHeader = false
+		for (let line of listText.split('\n')) {
+			if (!columns[0].endPos) {
+				if(line.indexOf('-----') >= 0) {
+					readColumns(columns, line)
+				} else {
+					continue
+				}
+			} else {
+				debug(`readNetConnections: ${line}`)
+				let index = columnNames.indexOf('Name')
+				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!name) {
+					// name is blank
+					continue
+				}
+				let connection = {ifaceType: '', ifaceId: '', profileName: name, hasIpv4: false, hasIpv6: false, ipAddress: '', isManualAddress: false }
+				index = columnNames.indexOf('InterfaceIndex')
+				const ifaceIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.ifaceId = ifaceIndex
+				index = columnNames.indexOf('IPv4Connectivity')
+				const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.hasIpv4 = !INVALID_CONNECTIVITY_MODES.includes(ipv4Connectivity)
+				index = columnNames.indexOf('IPv6Connectivity')
+				const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.hasIpv6 = !INVALID_CONNECTIVITY_MODES.includes(ipv6Connectivity)
+				this.connMap.set(ifaceIndex, connection)
+			}
+		}
 	}
 }
