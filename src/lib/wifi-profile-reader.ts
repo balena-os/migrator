@@ -16,7 +16,7 @@
 
 import * as _debug from 'debug';
 import { ConnectionProfile, Column, readColumns, runPowershell, PWSH_FORMAT_TABLE, 
-	PWSH_OUTPUT_WIDTH } from './networking-analyzer.spec';
+	PWSH_OUTPUT_WIDTH } from './networking-analyzer';
 
 const debug = _debug('migrator:wifi-profile-reader');
 const MODULE_NAME = 'WiFiProfileManagement'

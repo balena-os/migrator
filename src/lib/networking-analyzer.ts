@@ -21,7 +21,7 @@ import { platform } from 'os';
 import { promisify } from 'util';
 import RWMutex = require('rwmutex');
 import got from 'got';
-import * as wifiProfileReader from './wifi-profile-reader.spec'
+import * as wifiProfileReader from './wifi-profile-reader'
 import { tmp } from '@kb2ma/etcher-sdk';
 
 const execFileAsync = promisify(execFile);
