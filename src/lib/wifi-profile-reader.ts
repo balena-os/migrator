@@ -42,9 +42,8 @@ export class ProfileReader {
 
 	/**
 	 * Collect the list of available WiFi network profiles. Includes profile name, 
-	 * SSID, and key (passphrase) if any). Validates that we can ping balena API for
-	 * at least one currently connected network, identified by 'pingedBalenaApi'
-	 * attribute of profile.
+	 * SSID, and key (passphrase) if any. Validates that we can ping balena API for
+	 * at least one currently connected network.
 	 *
 	 * @return Array of WifiProfile found; empty if none
 	 */
@@ -114,7 +113,7 @@ export class ProfileReader {
 					continue
 				}
 
-				debug(`readAvailableSsid: ${line}`)
+				//debug(`readAvailableSsid: ${line}`)
 				index = columnNames.indexOf('SSID')
 				const ssid = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				profile.wifiSsid = ssid
@@ -172,17 +171,17 @@ export class ProfileReader {
 
 				index = columnNames.indexOf('Authentication')
 				const auth = line.substring(columns[index].startPos, columns[index].endPos).trim()
-				debug(`readWifiprofileMap: ${line}`)
+				//debug(`readWifiprofileMap: ${line}`)
 				switch (auth) {
-					case 'none':
+					case 'open':
 						profile.wifiAuthType = migrator.WifiAuthType.NONE
 						break
 					case 'WPA2PSK':
 						profile.wifiAuthType = migrator.WifiAuthType.WPA2_PSK
 						break
 					case 'WPA3SAE':
-						//profile.wifiAuthType = migrator.WifiAuthType.WPA3_SAE
-						//break
+						profile.wifiAuthType = migrator.WifiAuthType.WPA3_SAE
+						break
 					default:
 						console.log(`WiFi profile ${profile.name} with auth ${auth} not supported`)
 						continue
@@ -191,7 +190,7 @@ export class ProfileReader {
 				const password = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				profile.wifiKey = password
 				if (!profile.wifiKey && !KEYLESS_AUTH_MODES.includes(auth)) {
-					console.log(`Rejected WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
+					debug(`Rejected WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
 				} else {
 					profileMap.set(profile.name, profile)
 				}

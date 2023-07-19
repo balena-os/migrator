@@ -43,7 +43,14 @@ export default class AnalyzerCommand extends Command {
 		if (!connection) {
 			throw Error("balena API not reachable from any connected interface")
 		}
-		console.log(`balena API is reachable from ${connection.profileName} (${connection.ifaceType})\n`)
+		// Find profile/configuration for the verified connection for console output.
+		const p = analyzer.getProfiles().find(p => p.ifaceId == connection.ifaceId)
+		if (p == undefined) {
+			// We expect the testApiConnectivity() validates a profile exists, so
+			// just being extra safe here.
+			throw Error(`Can't find profile for connection ${connection.name}`)
+		}
+		console.log(`balena API is reachable from ${p.name} (${connection.ifaceType})\n`)
 
 		//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
 		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)

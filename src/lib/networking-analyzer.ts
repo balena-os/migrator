@@ -21,6 +21,7 @@ import { platform } from 'os';
 import { promisify } from 'util';
 import RWMutex = require('rwmutex');
 import got from 'got';
+import * as ipaddr from 'ipaddr.js';
 import * as wifiProfileReader from './wifi-profile-reader'
 import { tmp, migrator } from '@kb2ma/etcher-sdk';
 
@@ -30,12 +31,11 @@ const debug = _debug('migrator:networking-analyzer');
 export const PWSH_FORMAT_TABLE = '| Format-Table'
 export const PWSH_OUTPUT_WIDTH = '| Out-String -Stream -Width 300'
 // These collections are used to qualify acceptable results.
-const VALID_AUTH_MODES = ['WPAPSK', 'WPA2PSK', 'WPA3SAE', 'open', 'OWE']
-const KEYLESS_AUTH_MODES = ['open', 'OWE']
-const INVALID_CONNECTIVITY_MODES = ['Disconnected', 'NoTraffic']
+const INVALID_CONNECTIVITY_MODES = ['Disconnected', 'LocalNetwork', 'NoTraffic']
 const INVALID_ADDRESS_STATES = ['Duplicate', 'Invalid']
 /** Includes IPv6 fe80:, which is not routable. */
 const INVALID_PREFIX_ORIGINS = ['WellKnown']
+const INVALID_IPV6_RANGES = ['linkLocal', 'uniqueLocal']
 
 // This code provides a wrapper around the Windows Powershell WiFiProfileManagement 
 // module (https://github.com/jcwalker/WiFiProfileManagement) to retrieve profile
@@ -214,8 +214,8 @@ export class Analyzer {
 	}
 
 	/**
-	 * Validates that at least one currently connected network interface can ping 
-	 * balena API.
+	 * Validates that at least one currently connected network interface with a
+	 * networking profile can ping balena API.
 	 *
 	 * @return Connection used to reach the API
 	 */
@@ -223,13 +223,24 @@ export class Analyzer {
 		for (let connection of this.connMap.values()) {
 			if (connection.hasIpv4 || connection.hasIpv6) {
 				await this.readIpAddress(connection)
-				// Not presently accepting manually generated IP addresses
-				if (connection.ipAddress && !connection.isManualAddress) {
-					const pingOk = await this.pingApi(connection)
-					if (pingOk) {
-						// Only require ping to one connection
-						return connection
-					}
+				if (!connection.ipAddress) {
+					continue
+				}
+				if (connection.isManualAddress) {
+					console.log(`Ignoring connection with manual address ${connection.ipAddress}`)
+					continue
+				}
+				// Sanity check; there should be a profile for this connection, 
+				// including for DHCP ethernet.
+				const profile = this.profiles.find(p => p.ifaceId == connection.ifaceId)
+				if (profile == undefined) {
+					debug(`testApiConnectivity: Can't find profile for interface ${connection.ifaceId}`)
+					continue
+				}
+				const pingOk = await this.pingApi(connection)
+				if (pingOk) {
+					// Only require ping to one connection
+					return connection
 				}
 			}
 		}
@@ -256,7 +267,7 @@ export class Analyzer {
 	/** 
 	 * Reads the IP address for a network connection and updates the connection object 
 	 * with this value. The connection must have either IPv4 or IPv6 connectivity.
-	 * Prefers IPv4 address if connection has both IPv4 and IPv6 connectivity. Also 
+	 * Prefers IPv6 address if connection has both IPv4 and IPv6 connectivity. Also 
 	 * validates reported state of address via INVALID_ADDRESS_STATES.
 	 */
 	private async readIpAddress(connection: NetConnectivity): Promise<void> {
@@ -302,14 +313,30 @@ export class Analyzer {
 				index = columnNames.indexOf('AddressState')
 				const addressState = line.substring(columns[index].startPos, columns[index].endPos)
 				if (INVALID_ADDRESS_STATES.includes(addressState)) {
+					debug(`IP address state ${addressState} not usable`)
 					continue
 				}
-				connection.ipAddress = ipAddress
+				// Ensure prefix is valid before saving the address.
 				index = columnNames.indexOf('PrefixOrigin')
 				const prefixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (INVALID_PREFIX_ORIGINS.includes(prefixOrigin)) {
+					debug(`IP address prefix ${prefixOrigin} not usable`)
 					continue
 				}
+				// Ensure IPv6 address is globally routable.
+				if (connection.hasIpv6) {
+					try {
+						const addr = ipaddr.parse(ipAddress)
+						if (INVALID_IPV6_RANGES.includes(addr.range())) {
+							debug(`IPv6 address ${ipAddress} range not usable`)
+							continue
+						}
+					} catch (error) {
+						debug(`IPv6 address ${ipAddress} not valid`)
+						continue
+					}
+				}
+				connection.ipAddress = ipAddress
 
 				index = columnNames.indexOf('SuffixOrigin')
 				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
@@ -375,6 +402,7 @@ export class Analyzer {
 				const isConnected = (connectionState == 'Connected')
 				if (!isConnected) {
 					debug(`readNetAdapters: Not considering unconnected interfaceIndex ${ifIndex}`)
+					// No need to 'continue' here; won't find connection below
 				}
 				const connection = this.connMap.get(ifIndex)
 				if (connection == undefined) {
@@ -389,7 +417,9 @@ export class Analyzer {
 				let profile: ConnectionProfile | undefined
 				if (mediaType.includes('802.11')) {
 					connection.ifaceType = 'wifi'
-					profile = this.profiles.find(p => p.name == connection.profileName && p.wifiSsid)
+					// Connection (Network) name may include a sequence number suffix, like "MySsid 2", so match
+					// on start of network name.
+					profile = this.profiles.find(p => connection.profileName.startsWith(p.name) && p.wifiSsid)
 					if (profile == undefined) {
 						debug(`readNetAdapters: Can't find profile named ${connection.profileName} for wifi`)
 						continue
@@ -398,13 +428,15 @@ export class Analyzer {
 
 				} else if (mediaType.includes('802.3')) {
 					connection.ifaceType = 'ethernet'
-					profile = this.profiles.find(p => p.name == connection.profileName && !p.wifiSsid)
+					profile = this.profiles.find(p => connection.profileName.startsWith(p.name) && !p.wifiSsid)
+					// sanity check; shouldn't happen
 					if (profile) {
 						debug(`readNetAdapters: Profile named ${connection.profileName} for ethernet already exists`)
 						continue
 					}
 					profile = { name: connection.profileName, wifiSsid: '', wifiAuthType: migrator.WifiAuthType.NONE, wifiKey: '', ifaceId: ifIndex}
 					this.profiles.push(profile)
+					debug(`readNetAdapters: Collected profile named ${connection.profileName} for ethernet`)
 				}
 			}
 		}
