@@ -17,12 +17,12 @@
 import * as _debug from 'debug';
 import { ConnectionProfile, Column, readColumns, runPowershell, PWSH_FORMAT_TABLE, 
 	PWSH_OUTPUT_WIDTH } from './networking-analyzer';
+import { migrator } from '@kb2ma/etcher-sdk';
 
 const debug = _debug('migrator:wifi-profile-reader');
 const MODULE_NAME = 'WiFiProfileManagement'
-// These collections are used to qualify acceptable results.
-const VALID_AUTH_MODES = ['WPAPSK', 'WPA2PSK', 'WPA3SAE', 'open', 'OWE']
-const KEYLESS_AUTH_MODES = ['open', 'OWE']
+// These collections are used to qualify acceptable results. 'open' means no authentication.
+const KEYLESS_AUTH_MODES = ['open']
 
 /**
  * Reads WiFi profiles. Allows for separately specifying in the constructor a custom 
@@ -161,7 +161,7 @@ export class ProfileReader {
 					continue
 				}
 			} else {
-				let profile:ConnectionProfile = { name: '', wifiSsid: '', wifiKey: '', ifaceId: ''}
+				let profile:ConnectionProfile = { name: '', wifiSsid: '', wifiAuthType: migrator.WifiAuthType.NONE, wifiKey: '', ifaceId: ''}
 				let index = columnNames.indexOf('ProfileName')
 				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (!name) {
@@ -172,18 +172,28 @@ export class ProfileReader {
 
 				index = columnNames.indexOf('Authentication')
 				const auth = line.substring(columns[index].startPos, columns[index].endPos).trim()
-				if (VALID_AUTH_MODES.includes(auth)) {
-					debug(`readWifiprofileMap: ${line}`)
-					index = columnNames.indexOf('Password')
-					const password = line.substring(columns[index].startPos, columns[index].endPos).trim()
-					profile.wifiKey = password
-					if (!profile.wifiKey && !KEYLESS_AUTH_MODES.includes(auth)) {
-						console.log(`Rejected WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
-					} else {
-						profileMap.set(profile.name, profile)
-					}
+				debug(`readWifiprofileMap: ${line}`)
+				switch (auth) {
+					case 'none':
+						profile.wifiAuthType = migrator.WifiAuthType.NONE
+						break
+					case 'WPA2PSK':
+						profile.wifiAuthType = migrator.WifiAuthType.WPA2_PSK
+						break
+					case 'WPA3SAE':
+						//profile.wifiAuthType = migrator.WifiAuthType.WPA3_SAE
+						//break
+					default:
+						console.log(`WiFi profile ${profile.name} with auth ${auth} not supported`)
+						continue
+				}
+				index = columnNames.indexOf('Password')
+				const password = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				profile.wifiKey = password
+				if (!profile.wifiKey && !KEYLESS_AUTH_MODES.includes(auth)) {
+					console.log(`Rejected WiFi profile ${profile.name} with auth ${auth} but no passphrase`)
 				} else {
-					console.log(`Rejected WiFi profile ${profile.name} with auth ${auth}`)
+					profileMap.set(profile.name, profile)
 				}
 			}
 		}

@@ -22,7 +22,7 @@ import { promisify } from 'util';
 import RWMutex = require('rwmutex');
 import got from 'got';
 import * as wifiProfileReader from './wifi-profile-reader'
-import { tmp } from '@kb2ma/etcher-sdk';
+import { tmp, migrator } from '@kb2ma/etcher-sdk';
 
 const execFileAsync = promisify(execFile);
 const debug = _debug('migrator:networking-analyzer');
@@ -99,6 +99,7 @@ export const runPowershell = async (commands: string[]): Promise<string> => {
 export interface ConnectionProfile {
 	name: string;
 	wifiSsid: string;
+	wifiAuthType: migrator.WifiAuthType;
 	wifiKey: string;
 	ifaceId: string;
 }
@@ -402,7 +403,7 @@ export class Analyzer {
 						debug(`readNetAdapters: Profile named ${connection.profileName} for ethernet already exists`)
 						continue
 					}
-					profile = { name: connection.profileName, ifaceId: ifIndex, wifiSsid: '', wifiKey: ''}
+					profile = { name: connection.profileName, wifiSsid: '', wifiAuthType: migrator.WifiAuthType.NONE, wifiKey: '', ifaceId: ifIndex}
 					this.profiles.push(profile)
 				}
 			}
