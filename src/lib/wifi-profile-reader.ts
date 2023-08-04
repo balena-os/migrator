@@ -41,16 +41,16 @@ export class ProfileReader {
 	}
 
 	/**
-	 * Collect the list of available WiFi network profiles. Includes profile name, 
-	 * SSID, and key (passphrase) if any. Validates that we can ping balena API for
-	 * at least one currently connected network.
+	 * Collects the list of available WiFi network profiles for a given interface. 
+	 * Includes profile name, SSID, and key (passphrase) if any.
 	 *
+	 * @param ifaceName User facing name of the interface for which to collect profiles
 	 * @return Array of WifiProfile found; empty if none
 	 */
-	public async collectProfiles(): Promise<ConnectionProfile[]> {
+	public async collectProfiles(ifaceName: string): Promise<ConnectionProfile[]> {
 		// First get map of profile names and keys, and populate SSID.
-		const profiles = await this.readProfiles()
-		await this.readAvailableSsid(profiles)
+		const profiles = await this.readProfiles(ifaceName)
+		await this.readAvailableSsid(profiles, ifaceName)
 		// If WiFi network for a profile is not available, assume SSID matches profile name.
 		for (let p of profiles.values()) {
 			if (!p.wifiSsid) {
@@ -68,10 +68,10 @@ export class ProfileReader {
 	 * Reads the SSID from available WiFi networks for each profile in the provided list 
 	 * and updates the ssid property.
 	 */
-	private async readAvailableSsid(profileMap: Map<string,ConnectionProfile>) {
+	private async readAvailableSsid(profileMap: Map<string,ConnectionProfile>, ifaceName: string) {
 		/* Retrieves output formatted like the example below.
 		 *
-		 *  > Get-WiFiAvailableNetwork
+		 *  > Get-WiFiAvailableNetwork -WiFiAdapterName ${ifaceName}
 		 * 
 		 * ProfileName          SignalQuality  SecurityEnabled dot11DefaultAuthAlgorithm dot11DefaultCipherAlgorithm SSID
 		 * -----------          -------------  --------------- ------------------------- --------------------------- ----
@@ -79,7 +79,7 @@ export class ProfileReader {
 		 *                      83             True            DOT11_AUTH_ALGO_RSNA_PSK  DOT11_CIPHER_ALGO_CCMP      gal47lows
 		 */
 		let commands = Array.from(this.setupCommands)
-		commands.push(`Get-WiFiAvailableNetwork ${PWSH_FORMAT_TABLE} ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-WiFiAvailableNetwork -WiFiAdapterName "${ifaceName}" ${PWSH_FORMAT_TABLE} ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
@@ -109,7 +109,7 @@ export class ProfileReader {
 				}
 				const profile = profileMap.get(name)
 				if (profile == undefined) {
-					debug(`readAvailableSsid: Can't find profile for profile ${name}`)
+					debug(`readAvailableSsid: Can't find profile named ${name} on interface ${ifaceName}`)
 					continue
 				}
 
@@ -127,10 +127,10 @@ export class ProfileReader {
 	 *
 	 * @return Map of WifiProfile found, keyed on profile name; empty if none
 	 */
-	private async readProfiles(): Promise<Map<string,ConnectionProfile>> {
+	private async readProfiles(ifaceName: string): Promise<Map<string,ConnectionProfile>> {
 		/* Retrieves output formatted like the example below.
 		 *
-		 * > Get-WiFiProfile -ClearKey
+		 * > Get-WiFiProfile -ClearKey -WiFiAdapterName ${ifaceName}
 		 *
 		 * ProfileName               ConnectionMode Authentication Encryption Password
 		 * -----------               -------------- -------------- ---------- --------
@@ -138,7 +138,7 @@ export class ProfileReader {
 		 */
 
 		let commands = Array.from(this.setupCommands)
-		commands.push(`Get-WiFiProfile -ClearKey ${PWSH_FORMAT_TABLE} ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-WiFiProfile -ClearKey -WiFiAdapterName "${ifaceName}" ${PWSH_FORMAT_TABLE} ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
@@ -160,7 +160,8 @@ export class ProfileReader {
 					continue
 				}
 			} else {
-				let profile:ConnectionProfile = { name: '', wifiSsid: '', wifiAuthType: migrator.WifiAuthType.NONE, wifiKey: '', ifaceId: ''}
+				let profile:ConnectionProfile = { name: '', wifiSsid: '', wifiAuthType: migrator.WifiAuthType.NONE, 
+						wifiKey: '', ifaceId: '', isConnected: false}
 				let index = columnNames.indexOf('ProfileName')
 				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (!name) {

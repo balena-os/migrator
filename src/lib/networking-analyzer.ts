@@ -61,7 +61,14 @@ async function withExecMutex<T>(fn: () => T): Promise<T> {
 }
 
 /**
- * @summary Run a Powershell script
+ * Runs a Powershell script.
+ * 
+ * Localization considerations: We recommend that Powershell commands request the
+ * response formatted as a table, and the required columns for the response are
+ * specified explicitly. You then may use the readColumns() function to parse the
+ * output columns, which avoids actually reading the returned column headings
+ * because the request explicitly specified the name and order of the columns.
+ * 
  * @param {Array<String>} commands - list of commands to run
  * @return String with stdout from command
  */
@@ -92,9 +99,11 @@ export const runPowershell = async (commands: string[]): Promise<string> => {
  * Configuration attributes for a networking connection.
  * 'name' provided for WiFi and some non-WiFi profiles.
  * 'wifiSsid' is empty for non-WiFi networks.
+ * 'wifiAuthType' enum for authentication type, like WPA3_SAE for WPA3-Personal
  * 'wifiKey' is empty for networks with no authentication. 
- * 'ifaceId' identifies the network interface currently used by the profile; 
- *           useful but not really part of the configuration
+ * 'ifaceId' identifies the network interface associated with the profile; 
+ *           foreign key into Analyzer connMap entries
+ * 'isConnected' identifies this profile as currently connected on the interface 'ifaceId'
  */
 export interface ConnectionProfile {
 	name: string;
@@ -102,13 +111,16 @@ export interface ConnectionProfile {
 	wifiAuthType: migrator.WifiAuthType;
 	wifiKey: string;
 	ifaceId: string;
+	isConnected: boolean;
 }
 
 /** 
  * Attributes of a network adapter/interface/connection useful for testing connectivity.
- * 'ifaceType' categorizes the connection; 'wifi' or 'ethernet'.
- * 'ifaceId' provides a unique handle for an adapter/interface.
- * 'profileName' provides a Windows name for an active connection; uses same name as WiFi ssid
+ * 'ifaceType' categorizes the connection; 'wifi' or 'ethernet'
+ * 'ifaceId' provides a unique handle for an adapter/interface
+ * 'ifaceName' Windows user-facing name for the adapter/interface, like "Wi-Fi"
+ * 'deviceId' is the OS/hardware device identifier for the adapter/interface
+ * 'name' Windows user-facing name for an active connection; uses same name as WiFi ssid
  * 'hasIpv4' if connection is using IPv4 networking
  * 'hasIpv6' if connection is using IPv6 networking
  * 'ipAddress' used by a connection
@@ -117,7 +129,9 @@ export interface ConnectionProfile {
 interface NetConnectivity {
 	ifaceType: string;
 	ifaceId: string;
-	profileName: string;
+	ifaceName: string;
+	deviceId: string;
+	name: string;
 	hasIpv4: boolean;
 	hasIpv6: boolean;
 	ipAddress: string;
@@ -137,10 +151,12 @@ export interface Column {
 
 /** 
  * Read column positions from the header separator ('---') line. See the example below.
- * Does not validate column names.
+ * Does not validate column names to avoid localization issues. We assume that the
+ * column names can be specified in English for the query, regardless of the output
+ * language used in the response.
  * 
- * ProfileName          SignalQuality  SecurityEnabled dot11DefaultAuthAlgorithm dot11DefaultCipherAlgorithm SSID
- * -----------          -------------  --------------- ------------------------- --------------------------- ----
+ * Name          SignalQuality  SecurityEnabled dot11DefaultAuthAlgorithm dot11DefaultCipherAlgorithm SSID
+ * ----          -------------  --------------- ------------------------- --------------------------- ----
  */
 export const readColumns = (columns:Column[] = [], line = ''): void => {
 	let linePos = 0
@@ -166,7 +182,8 @@ export const readColumns = (columns:Column[] = [], line = ''): void => {
 
 /**
  * Analyzes networking connectivity. Always call run() first. Uses Powershell modules
- * to collect the information.
+ * to collect the information. Provides profile information for Etcher SDK, and a
+ * test for network connectivity to balena API.
  * 
  * Example use:
  *   const analyzer = new Analyzer('')
@@ -175,8 +192,9 @@ export const readColumns = (columns:Column[] = [], line = ''): void => {
  *   const connection = await analyzer.testApiConnectivity()
  */
 export class Analyzer {
-	/** Map keyed on interface ID */
+	/** Map of active connections, keyed on interface ID */
 	private connMap: Map<string,NetConnectivity> = new Map<string,NetConnectivity>()
+	/** WiFi/Ethernet profiles collected from each interface */
 	private profiles: ConnectionProfile[] = []
 	private psModulePath = ''
 
@@ -189,17 +207,40 @@ export class Analyzer {
 	}
 
 	/**
-	 * Runs the analyzer. Collect networking profiles and connectivity data. Must
-	 * call this before other public methods.
+	 * Runs the analyzer. Collects networking profiles, which are passed to Etcher SDK
+	 * to be written for balenaOS. Also collects connectivity data for testing connectivity
+	 * to balena API.
+	 * 
+	 * Must call this method before other public methods.
 	 */
 	public async run(): Promise<void> {
-		const wifiReader = new wifiProfileReader.ProfileReader(this.psModulePath)
-		this.profiles = await wifiReader.collectProfiles()
-
 		this.connMap = new Map<string, NetConnectivity>()
 		// Must call these helper functions in this order.
-		await this.readNetConnections()
+		// Creates entries in 'connMap' for active connections
 		await this.readNetAdapters()
+		await this.readNetConnections()
+
+		const wifiReader = new wifiProfileReader.ProfileReader(this.psModulePath)
+		// Collect profiles for each interface. Profile names may be duplicated across interfaces.
+		for (let connection of this.connMap.values()) {
+			if (connection.ifaceType == 'wifi') {
+				const connProfiles = await wifiReader.collectProfiles(connection.ifaceName)
+				connProfiles.forEach(p => p.ifaceId = connection.ifaceId)
+				this.profiles.push(...connProfiles)
+			}
+		}
+
+		// Match WiFi connection to profile by interface and SSID
+		await this.readWlanInterfaces()
+
+		// Adds a profile for 802.3 ethernet connections for consistency with WiFi
+		for (let connection of this.connMap.values()) {
+			if (connection.ifaceType == 'ethernet') {
+				const profile = { name: connection.name, wifiSsid: '', wifiAuthType: migrator.WifiAuthType.NONE, 
+						wifiKey: '', ifaceId: connection.ifaceId, isConnected: true}
+				this.profiles.push(profile)
+			}
+		}
 	}
 
 	/**
@@ -232,9 +273,9 @@ export class Analyzer {
 				}
 				// Sanity check; there should be a profile for this connection, 
 				// including for DHCP ethernet.
-				const profile = this.profiles.find(p => p.ifaceId == connection.ifaceId)
+				const profile = this.profiles.find(p => p.ifaceId == connection.ifaceId && p.isConnected)
 				if (profile == undefined) {
-					debug(`testApiConnectivity: Can't find profile for interface ${connection.ifaceId}`)
+					debug(`testApiConnectivity: Can't find connected profile for interface ${connection.ifaceId}`)
 					continue
 				}
 				const pingOk = await this.pingApi(connection)
@@ -259,7 +300,7 @@ export class Analyzer {
 			debug(`pingApi: response code: ${response.statusCode}`)
 			return response.statusCode == 200
 		} catch (error) {
-			console.log(`balena API not reachable from ${connection.profileName} (${connection.ifaceType}): ${error}`)
+			console.log(`balena API not reachable from ${connection.name} (${connection.ifaceType}): ${error}`)
 			return false
 		}
 	}
@@ -302,7 +343,7 @@ export class Analyzer {
 					continue
 				}
 			} else {
-				debug(`readIpAddress: ${line}`)
+				//debug(`readIpAddress: ${line}`)
 				let index = columnNames.indexOf('IPAddress')
 				const ipAddress = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (!ipAddress) {
@@ -342,7 +383,8 @@ export class Analyzer {
 				const suffixOrigin = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				connection.isManualAddress = (prefixOrigin == 'Manual' || suffixOrigin == 'Manual')
 				if (connection.isManualAddress) {
-					debug(`IP address ${ipAddress} generated manually`)
+					// Don't accept manual/static address
+					debug(`IP address ${ipAddress} generated manually; not usable`)
 				} else {
 					// May be multiple addresses; just use the first acceptable one.
 					break
@@ -351,26 +393,116 @@ export class Analyzer {
 		}
 	}
 
+	/**
+	 * Matches connection/interface/adapter to a connection profile via GUID
+	 * for the adapter to SSID for the profile. Requires that the key/title for the
+	 * "GUID" and "SSID" rows match those names exactly, so possibly subject to
+	 * localization changes. Requires use of a legacy 'netsh' command, whose output
+	 * cannot be formatted with the flexibility of a Powershell command.
+	 */
+	private async readWlanInterfaces(): Promise<void> {
+		/* Retrieves output formatted like the example below. netsh is the only
+		 * tool to link a WiFi profile to a network connection; no native Powershell command.
+		 * 
+		/* PS > (netsh wlan show interfaces)
+		 *
+		 * There is 1 interface on the system:
+		 *
+		 *    Name                   : Wi-Fi
+		 *    Description            : Intel(R) Wireless-AC 9560 160MHz
+		 *    GUID                   : 99d15e59-1ff4-4308-af12-4204ef73b20d
+		 *    Physical address       : 54:8d:5a:65:1b:52
+		 *    State                  : connected
+		 *    SSID                   : gal47lows
+		 *    BSSID                  : c0:4a:00:9a:71:9d
+		 *    Network type           : Infrastructure
+		 *    Radio type             : 802.11n
+		 *    Authentication         : WPA2-Personal
+		 *    Cipher                 : CCMP
+		 *    Connection mode        : Auto Connect
+		 *    Channel                : 6
+		 *    Receive rate (Mbps)    : 144.4
+		 *    Transmit rate (Mbps)   : 144.4
+		 *    Signal                 : 82%
+		 *    Profile                : gal47lows
+		 *
+		 *    Hosted network status  : Not available
+		 */
+
+		let commands:string[] = []
+		commands.push(`(netsh wlan show interfaces)`)
+		let listText = ''
+		try {
+			listText = await runPowershell(commands);
+		} catch (error) {
+			throw(`readWlanInterfaces: ${error}`);
+		}
+
+		// Assume that multiple interfaces are separated by a blank line.
+		// Within an interface there is a GUID line and an SSID line.
+		// When both GUID and SSID are found, match with profile.
+		let guid = ''
+		let ssid = ''
+		for (let line of listText.split('\n')) {
+			//debug(`line: ${line}`)
+			const guidMatch = line.match(/^\s+GUID\s+:\s([0-9a-fA-F\-]+)/)
+			if (guidMatch) {
+				guid = guidMatch[1].toUpperCase()
+			} else {
+				// characters for SSID are arbitrary; just read rest of line
+				const ssidMatch = line.match(/^\s+SSID\s+:\s(.+)/)
+				if (ssidMatch) {
+					ssid = ssidMatch[1]
+				}
+			}
+			if (guid && ssid) {
+				// match connection to profile
+				for (const conn of this.connMap.values()) {
+					if (conn.ifaceType == 'wifi' && conn.deviceId == guid) {
+						const profile = this.profiles.find(p => p.ifaceId == conn.ifaceId && p.wifiSsid == ssid)
+						if (profile == undefined) {
+							debug(`readWlanInterfaces: Can't find profile for SSID ${ssid} on interface ${conn.ifaceName}`)
+							continue
+						}
+						profile.isConnected = true
+						debug(`readWlanInterfaces: Matched connection ${conn.name} on interface ${conn.ifaceName} to profile SSID: ${ssid}`)
+						break
+					}
+				}
+				guid = ''
+				ssid = ''
+			} else {
+				// May find a GUID without an SSID (not connected), so must blank
+				// at end of interface.
+				const blankMatch = line.match(/^\s*$/)
+				if (blankMatch) {
+					guid = ''
+					ssid = ''
+				}
+			}
+		}
+	}
+
 	/** 
-	 * Uses the interface index to correlate a connection/interface/adapter to 
-	 * a connection profile. Determines the type of interface -- WiFi or Ethernet.
-	 * Updates internal 'connMap' and 'profiles'.
-	 * Disregards interfaces that are not connected currently.
+	 * Reads network interfaces/adapters for the computer, and adds interfaces with
+	 * an active connection to 'connMap'. Disregards interfaces without an active
+	 * connection.
 	 */
 	private async readNetAdapters(): Promise<void> {
 		/* Retrieves output formatted like the example below.
 		 * 
-		 * PS > Get-NetAdapter | Format-Table -Property ifIndex, PhysicalMediaType, MediaConnectionState
+		 * PS > Get-NetAdapter | Format-Table -Property ifIndex, PhysicalMediaType, MediaConnectionState, Name, DeviceID
 		 * 
-		 * ifIndex PhysicalMediaType MediaConnectionState
-		 * ------- ----------------- --------------------
-		 *      13 802.3                        Connected
-		 *      12 BlueTooth                 Disconnected
-		 *       9 Native 802.11                Connected
+		 * ifIndex PhysicalMediaType MediaConnectionState Name                         DeviceID
+		 * ------- ----------------- -------------------- ----                         --------
+		 *      13 802.3                     Disconnected Ethernet                     {C79407AC-16DA-4EF6-9459-BF82522FB452}
+		 *      12 BlueTooth                 Disconnected Bluetooth Network Connection {B0F7EB96-706B-4905-A56E-6C084AF169A7}
+		 *       9 Native 802.11                Connected Wi-Fi                        {99D15E59-1FF4-4308-AF12-4204EF73B20D}
+		 
 		 */
 
 		let commands:string[] = []
-		commands.push(`Get-NetAdapter ${PWSH_FORMAT_TABLE} -Property ifIndex, PhysicalMediaType, MediaConnectionState ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-NetAdapter ${PWSH_FORMAT_TABLE} -Property ifIndex, PhysicalMediaType, MediaConnectionState, Name, DeviceID ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
@@ -379,7 +511,7 @@ export class Analyzer {
 		}
 
 		// define columns
-		const columnNames = ['ifIndex', 'PhysicalMediaType', 'MediaConnectionState']
+		const columnNames = ['ifIndex', 'PhysicalMediaType', 'MediaConnectionState', 'Name', 'DeviceID']
 		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
 
 		let foundHeader = false
@@ -391,72 +523,65 @@ export class Analyzer {
 					continue
 				}
 			} else {
-				// Find connection
+				//debug(`readNetAdapters: ${line}`)
+				// Create connection
 				let index = columnNames.indexOf('ifIndex')
 				const ifIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				if (!ifIndex) {
+					// probably blank line
 					continue
 				}
+				let connection = {ifaceType: '', ifaceId: ifIndex, ifaceName: '', deviceId: '', name: '', hasIpv4: false, hasIpv6: false, ipAddress: '', isManualAddress: false }
+
 				index = columnNames.indexOf('MediaConnectionState')
 				const connectionState = line.substring(columns[index].startPos, columns[index].endPos).trim()
-				const isConnected = (connectionState == 'Connected')
-				if (!isConnected) {
+				if (connectionState != 'Connected') {
 					debug(`readNetAdapters: Not considering unconnected interfaceIndex ${ifIndex}`)
-					// No need to 'continue' here; won't find connection below
-				}
-				const connection = this.connMap.get(ifIndex)
-				if (connection == undefined) {
-					debug(`readNetAdapters: Can't find interfaceIndex ${ifIndex}`)
 					continue
 				}
 
-				debug(`readNetAdapters: ${line}`)
 				index = columnNames.indexOf('PhysicalMediaType')
 				const mediaType = line.substring(columns[index].startPos, columns[index].endPos).trim()
-
-				let profile: ConnectionProfile | undefined
 				if (mediaType.includes('802.11')) {
 					connection.ifaceType = 'wifi'
-					// Connection (Network) name may include a sequence number suffix, like "MySsid 2", so match
-					// on start of network name.
-					profile = this.profiles.find(p => connection.profileName.startsWith(p.name) && p.wifiSsid)
-					if (profile == undefined) {
-						debug(`readNetAdapters: Can't find profile named ${connection.profileName} for wifi`)
-						continue
-					}
-					profile.ifaceId = ifIndex
-
 				} else if (mediaType.includes('802.3')) {
 					connection.ifaceType = 'ethernet'
-					profile = this.profiles.find(p => connection.profileName.startsWith(p.name) && !p.wifiSsid)
-					// sanity check; shouldn't happen
-					if (profile) {
-						debug(`readNetAdapters: Profile named ${connection.profileName} for ethernet already exists`)
-						continue
-					}
-					profile = { name: connection.profileName, wifiSsid: '', wifiAuthType: migrator.WifiAuthType.NONE, wifiKey: '', ifaceId: ifIndex}
-					this.profiles.push(profile)
-					debug(`readNetAdapters: Collected profile named ${connection.profileName} for ethernet`)
+				} else {
+					console.log(`Not considering connection of type ${mediaType}`)
+					continue
+				}
+				this.connMap.set(ifIndex, connection)
+				debug(`readNetAdapters: Created connection for interfaceIndex ${ifIndex}`)
+
+				index = columnNames.indexOf('Name')
+				const ifaceName = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.ifaceName = ifaceName
+				index = columnNames.indexOf('DeviceID')
+				const deviceId = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (deviceId && deviceId.charAt(0) == '{' && deviceId.charAt(deviceId.length-1) == '}') {
+					connection.deviceId = deviceId.substring(1, deviceId.length-1).toUpperCase()
+				} else {
+					connection.deviceId = deviceId.toUpperCase()
 				}
 			}
 		}
 	}
 
 	/** 
-	 * Queries for active network connections, and adds them to this object's 'connMap'
+	 * Updates connections with connection name and IP connectivity attributes.
 	 */
 	private async readNetConnections(): Promise<void> {
 		/* Retrieves output formatted like the example below.
 		 * 
-		 * PS > Get-NetConnectionProfile | Format-Table -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity
+		 * PS > Get-NetConnectionProfile | Format-Table -Property InterfaceIndex, Name, IPv4Connectivity, IPv6Connectivity
 		 * 
-		 * Name      InterfaceIndex IPv4Connectivity IPv6Connectivity
-		 * ----      -------------- ---------------- ----------------
-		 * gal47lows              9         Internet        NoTraffic
+		 * InterfaceIndex Name      IPv4Connectivity IPv6Connectivity
+		 * -------------- ----      ---------------- ----------------
+		 *              9 gal47lows          Internet        NoTraffic
 		 */
 
 		let commands:string[] = []
-		commands.push(`Get-NetConnectionProfile ${PWSH_FORMAT_TABLE} -Property Name, InterfaceIndex, IPv4Connectivity, IPv6Connectivity ${PWSH_OUTPUT_WIDTH}`)
+		commands.push(`Get-NetConnectionProfile ${PWSH_FORMAT_TABLE} -Property InterfaceIndex, Name, IPv4Connectivity, IPv6Connectivity ${PWSH_OUTPUT_WIDTH}`)
 		let listText = ''
 		try {
 			listText = await runPowershell(commands);
@@ -465,7 +590,7 @@ export class Analyzer {
 		}
 
 		// define columns
-		const columnNames = ['Name', 'InterfaceIndex', 'IPv4Connectivity', 'IPv6Connectivity']
+		const columnNames = ['InterfaceIndex', 'Name', 'IPv4Connectivity', 'IPv6Connectivity']
 		const columns:Column[] = columnNames.map(name => ({title: name, startPos: 0, endPos: 0}))
 
 		let foundHeader = false
@@ -477,24 +602,28 @@ export class Analyzer {
 					continue
 				}
 			} else {
-				debug(`readNetConnections: ${line}`)
-				let index = columnNames.indexOf('Name')
-				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
-				if (!name) {
-					// name is blank
+				//debug(`readNetConnections: ${line}`)
+				let index = columnNames.indexOf('InterfaceIndex')
+				const ifIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				if (!ifIndex) {
+					// probably blank line
 					continue
 				}
-				let connection = {ifaceType: '', ifaceId: '', profileName: name, hasIpv4: false, hasIpv6: false, ipAddress: '', isManualAddress: false }
-				index = columnNames.indexOf('InterfaceIndex')
-				const ifaceIndex = line.substring(columns[index].startPos, columns[index].endPos).trim()
-				connection.ifaceId = ifaceIndex
+				const connection = this.connMap.get(ifIndex)
+				if (connection == undefined) {
+					debug(`readNetConnections: Can't find interfaceIndex ${ifIndex}`)
+					continue
+				}
+
+				index = columnNames.indexOf('Name')
+				const name = line.substring(columns[index].startPos, columns[index].endPos).trim()
+				connection.name = name
 				index = columnNames.indexOf('IPv4Connectivity')
 				const ipv4Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				connection.hasIpv4 = !INVALID_CONNECTIVITY_MODES.includes(ipv4Connectivity)
 				index = columnNames.indexOf('IPv6Connectivity')
 				const ipv6Connectivity = line.substring(columns[index].startPos, columns[index].endPos).trim()
 				connection.hasIpv6 = !INVALID_CONNECTIVITY_MODES.includes(ipv6Connectivity)
-				this.connMap.set(ifaceIndex, connection)
 			}
 		}
 	}

@@ -1,10 +1,11 @@
-import {Command, Flags} from '@oclif/core';
+import { Flags } from '@oclif/core';
 // Must use CommonJS version of inquirer due to limitations of vercel/pkg.
 import * as inquirer from 'inquirer';
 import { migrator } from '@kb2ma/etcher-sdk';
 import { Analyzer, ConnectionProfile } from '../../lib/networking-analyzer'
+import { MigratorCommand } from '../../lib/migrator-command'
 
-export default class AnalyzerCommand extends Command {
+export default class AnalyzerCommand extends MigratorCommand {
 	static description = 'Analyze migration of this device to balenaOS';
 
 	static examples = [
@@ -29,32 +30,23 @@ export default class AnalyzerCommand extends Command {
 		const skipTasks = 'shrink,copy,config,bootloader,reboot'
 		const options:migrator.MigrateOptions = { omitTasks: skipTasks, connectionProfiles: []}
 
-		// Run a networking analyzer
-		const psInstallPath = `${process.cwd()}\\modules`
-		const analyzer = new Analyzer(psInstallPath)
-		await analyzer.run()
-		// Collect WiFi profiles
-		const profiles = analyzer.getProfiles().filter(p => p.wifiSsid)
-		console.log(`Found WiFi profiles: ${profiles.length ? profiles.map(p => " " + p.name) : "<none>"}`)
-		profiles.forEach(p => options.connectionProfiles.push(p))
+		let resOK = true
+		try {
+			// Run networking analyzer to collect profiles and validate connectivity.
+			const psInstallPath = `${process.cwd()}\\modules`
+			const analyzer = new Analyzer(psInstallPath)
+			await analyzer.run()
 
-		// Verify at least one network interface can ping balena API.
-		const connection = await analyzer.testApiConnectivity()
-		if (!connection) {
-			throw Error("balena API not reachable from any connected interface")
-		}
-		// Find profile/configuration for the verified connection for console output.
-		const p = analyzer.getProfiles().find(p => p.ifaceId == connection.ifaceId)
-		if (p == undefined) {
-			// We expect the testApiConnectivity() validates a profile exists, so
-			// just being extra safe here.
-			throw Error(`Can't find profile for connection ${connection.name}`)
-		}
-		console.log(`balena API is reachable from ${p.name} (${connection.ifaceType})\n`)
+			const profiles = await this.validateAnalyzer(analyzer)
+			profiles.forEach(p => options.connectionProfiles.push(p))
 
-		//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
-		migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
-			.then(console.log)
-			.catch(console.log);
+			//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
+			const res = await migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
+			resOK = (res == migrator.MigrateResult.OK) 
+		} catch (error) {
+			console.log("Can't proceed with migration:", error);
+			resOK = false
+		}
+		this.exit(resOK ? 0 : 1)
 	}
 }
