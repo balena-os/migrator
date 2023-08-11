@@ -148,6 +148,14 @@ export interface Column {
 	endPos: number
 }
 
+/**
+ * Properties to alter how the analyzer operates.
+ * 
+ * includeWifi: Look for WiFi network configurations, and test API connectivity if present; default true
+ */
+export interface AnalyzerOptions {
+	includeWifi?: boolean
+}
 
 /** 
  * Read column positions from the header separator ('---') line. See the example below.
@@ -197,13 +205,18 @@ export class Analyzer {
 	/** WiFi/Ethernet profiles collected from each interface */
 	private profiles: ConnectionProfile[] = []
 	private psModulePath = ''
+	private options: AnalyzerOptions = { includeWifi: true }
 
 	/** 
-	 * If using a built-in module path, leave modulePath empty. Otherwise this path
+	 * @param modulePath If using a built-in module path, leave modulePath empty. Otherwise this path
 	 * will be added to the Powershell module page for the WiFiProfileManagement module.
+	 * @param options Optional properties to alter how the analyzer operates; otherwise uses defaults
 	 */
-	constructor(modulePath = '') {
+	constructor(modulePath = '', options:AnalyzerOptions = {}) {
 		this.psModulePath = modulePath
+		if (options) {
+			this.options = Object.assign(this.options, options)
+		}
 	}
 
 	/**
@@ -220,18 +233,19 @@ export class Analyzer {
 		await this.readNetAdapters()
 		await this.readNetConnections()
 
-		const wifiReader = new wifiProfileReader.ProfileReader(this.psModulePath)
-		// Collect profiles for each interface. Profile names may be duplicated across interfaces.
-		for (let connection of this.connMap.values()) {
-			if (connection.ifaceType == 'wifi') {
-				const connProfiles = await wifiReader.collectProfiles(connection.ifaceName)
-				connProfiles.forEach(p => p.ifaceId = connection.ifaceId)
-				this.profiles.push(...connProfiles)
+		if (this.options.includeWifi) {
+			const wifiReader = new wifiProfileReader.ProfileReader(this.psModulePath)
+			// Collect profiles for each interface. Profile names may be duplicated across interfaces.
+			for (let connection of this.connMap.values()) {
+				if (connection.ifaceType == 'wifi') {
+					const connProfiles = await wifiReader.collectProfiles(connection.ifaceName)
+					connProfiles.forEach(p => p.ifaceId = connection.ifaceId)
+					this.profiles.push(...connProfiles)
+				}
 			}
+			// Match WiFi connection to profile by interface and SSID
+			await this.readWlanInterfaces()
 		}
-
-		// Match WiFi connection to profile by interface and SSID
-		await this.readWlanInterfaces()
 
 		// Adds a profile for 802.3 ethernet connections for consistency with WiFi
 		for (let connection of this.connMap.values()) {

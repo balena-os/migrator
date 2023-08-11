@@ -18,6 +18,10 @@ export default class AnalyzerCommand extends MigratorCommand {
 			required: true,
 			description: "balenaOS image path name",
 		}),
+		'no-wifi': Flags.boolean({
+			default: false,
+			description: "do not analyze WiFi network configurations"
+		}),
 	};
 	static args = {};
 
@@ -34,7 +38,8 @@ export default class AnalyzerCommand extends MigratorCommand {
 		try {
 			// Run networking analyzer to collect profiles and validate connectivity.
 			const psInstallPath = `${process.cwd()}\\modules`
-			const analyzer = new Analyzer(psInstallPath)
+			const analyzerOptions = { includeWifi: !flags['no-wifi'] }
+			const analyzer = new Analyzer(psInstallPath, analyzerOptions)
 			await analyzer.run()
 
 			const profiles = await this.validateAnalyzer(analyzer)
