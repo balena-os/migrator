@@ -4,7 +4,7 @@ Command line interface (CLI) to automate migration of a computer to run balenaOS
 
 **WARNING This tool will overwrite the operating system and all data on the computer that runs it.** Be sure to save any important data before using the migrator.
 
-Migrator accepts a balenaOS image file for your computer, formats it onto the computer's disk/flash storage, and then replaces the current operating system with balenaOS derived from that image. As a CLI application, it's easy to automate, and you can run it remotely.
+Migrator accepts a balenaOS image file for your computer, formats it onto the computer's disk/flash storage, collects important configuration data, and then replaces the current operating system with balenaOS derived from that image. As a CLI application, it's easy to automate, and you can run it remotely.
 
 *Our goal is to make it easy to migrate a computer to use balenaOS.* Let us know how it works for you. See the balenaOS [Roadmap](https://balena.fider.io/posts/2/provide-tool-to-onboard-migrate-devices-already-deployed-in-the-field) for planned Migrator features and support for more types of devices. We're also happy to accept code and documentation contributions. See *Development* below.
 
@@ -14,7 +14,8 @@ Migrator requires these features of the computer:
 
 * Currently running Windows 10
 * UEFI based firmware
-* Ethernet with DHCP (self-configured) networking
+* Ethernet with DHCP (dynamic addressing), *OR*
+* WiFi with DHCP, and WPA Personal or open (no) authentication
 
 ## Getting Started
 
@@ -31,21 +32,76 @@ Use [balenaCLI](https://docs.balena.io/reference/balena-cli/#os-download-type) o
   > balena os configure balena-flasher.img --fleet MyFleet --version 2.113.12
 ```
 
+### Analyze computer (optional)
+Run the *analyze* command the first time you want to migrate a new device type, or for a computer with a different storage or networking configuration. The analyze command verifies there is sufficient disk storage for the migration, identifies configured WiFi networks, and verifies the balenaCloud API is accessible for registration.
+
+You must run the command below as Administrator on Windows.
+
+```
+  > migrator analyze -i balena-flasher.img
+
+FLAGS
+  -i, --image=<value>    (required) balenaOS flasher image path name
+  --no-wifi              do not analyze WiFi network configurations
+
+```
+
+You should see output like below on the CLI from the *analyze* command.
+<details>
+<summary>Command output</summary>
+
+```
+Found WiFi profiles:  quir29key, gal47lows
+balena API is reachable from gal47lows (wifi)
+
+Migrate \\.\PhysicalDrive0 with image .\balena-flasher-dev.img
+
+Partitions on target:
+index 1, offset 1048576, type C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+index 2, offset 105906176, type E3C9E316-0B5C-4DB8-817D-F92DF00215AE
+index 3, offset 122683392, type EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
+index 4, offset 53129248768, type DE94BBA4-06D1-4D40-A16A-BFD50179D6AC
+Boot partition not found on target
+Require 42991616 (41.00 MB) for boot partition
+RootA partition not found on target
+Require 3977248768 (3793.00 MB) for rootA partition
+Found 1048576 (1.00 MB) not allocated on disk \\.\PhysicalDrive0
+
+Skip task: shrink partition C by 4020240384 (3834.00 MB)
+
+Skip task: create and copy partitions
+
+Skip task: write configuration
+
+Skip task: bootloader setup
+Skip task: reboot
+```
+
+</details>
+
+
 ### Run Migrator
 The command below prepares the computer for migration, and automatically reboots to execute it and launch balenaOS. You then should see the device appear with its fleet in your balenaCloud dashboard.
 
 Remember the migrator will overwrite all data on the computer! First backup any important data so you can restore it as needed after the migration to balenaOS.
 
+The migrator executes these steps:
+
+1. Run the Analyze step above to ensure balenaCloud is accessible for registration.
+2. Shrink disk partitions as needed to ensure enough space to copy the balenaOS image to the disk, and then copy the image.
+3. Update the image with system-connections [configuration](https://docs.balena.io/reference/OS/network/#wifi-setup) for all WiFi networks configured on the host computer.
+4. Place the bootloader for balenaOS in position, and then automatically reboot the computer to execute the migration.
+
 Download the most recent migrator executable from the Releases [page](https://github.com/balena-os/migrator/releases). The file is named `migrator-v{version}-windows-x64.zip`; unzip it first.
 
 You must run the command below as Administrator on Windows.
 ```
-  > migrator -i balena-flasher.img [-y] [--analyze]
+  > migrator run -i balena-flasher.img [-y]
 
 FLAGS
   -i, --image=<value>    (required) balenaOS flasher image path name
   -y, --non-interactive  no user input; use defaults
-  --analyze              only analyze work to do; don't modify computer
+  --no-wifi              do not migrate WiFi network configurations
 ```
 Since the migrator executes a destructive operation, it first prompts you to confirm. Use the `--non-interactive` option to avoid the prompt and begin the migration immediately.
 
@@ -54,6 +110,9 @@ You should see output like below on the CLI from a successful run of the migrato
 <summary>Command output</summary>
 
 ```
+Found WiFi profiles:  quir29key, gal47lows
+balena API is reachable from gal47lows (wifi)
+
 Migrate \\.\PhysicalDrive0 with image .\balena-flasher-dev.img
 
 Partitions on target:
@@ -61,8 +120,9 @@ index 1, offset 1048576, type C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 index 2, offset 105906176, type E3C9E316-0B5C-4DB8-817D-F92DF00215AE
 index 3, offset 122683392, type EBD0A0A2-B9E5-4433-87C0-68B6B72699C7
 index 4, offset 53129248768, type DE94BBA4-06D1-4D40-A16A-BFD50179D6AC
-
+Boot partition not found on target
 Require 42991616 (41.00 MB) for boot partition
+RootA partition not found on target
 Require 3977248768 (3793.00 MB) for rootA partition
 Found 1048576 (1.00 MB) not allocated on disk \\.\PhysicalDrive0
 Shrink partition C by 4020240384 (3834.00 MB)
@@ -84,6 +144,10 @@ write: {"position":375390208,"bytes":375390208,"speed":882800964.0826695,"averag
 read: {"position":4022337537,"bytes":3976200193,"speed":692391510.844067,"averageSpeed":700652016.3876652}
 write: {"position":3976200193,"bytes":3976200193,"speed":692235395.8367282,"averageSpeed":700281823.3532934}
 Copy complete
+
+Write network configuration
+Wrote network configuration for quir29key
+Wrote network configuration for gal47lows
 
 Mount Windows boot partition and copy grub bootloader from image
 Cleared up mount M: for EFI
@@ -114,9 +178,10 @@ To build the migrator, clone this repository, install the node modules and build
 > del node_modules\pkg\dictionary\drivelist.js
 > npm run pkg
 ```
-These commands generate a single-file executable `migrator.exe` in the `dist` directory.
+These commands generate a single-file executable `migrator.exe` in the `dist` directory. You also need to install WiFiProfileManagement [tool](https://github.com/jcwalker/WiFiProfileManagement) in your Powershell module path to run the migrator.
 
 ## License
-
 The project is licensed under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
 A copy is also available in the LICENSE file in this repository.
+
+Migrator uses Jason Walker's WiFiProfileManagement Powershell [module](https://github.com/jcwalker/WiFiProfileManagement) to read the Windows WiFi configuration.

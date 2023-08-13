@@ -20,12 +20,17 @@
     "@oclif/core": "^2",
     "@oclif/plugin-help": "^5",
     "@oclif/plugin-plugins": "^2.3.2",
-    "etcher-sdk": "^8.6.x",
-    "inquirer": "^8.2.5"
+    "debug": "^3.1.0",
+    "etcher-sdk": "^8.7.x",
+    "got": "^11.8.6",
+    "inquirer": "^8.2.5",
+    "ipaddr.js": "^2.1.0",
+    "rwmutex": "^1.0.0"
   },
   "devDependencies": {
     "@oclif/test": "^2.3.8",
     "@types/chai": "^4",
+    "@types/debug": "0.0.31",
     "@types/inquirer": "^8.2.5",
     "@types/mocha": "^9.0.0",
     "@types/node": "^18.11.18",
@@ -44,14 +49,15 @@
   "oclif": {
     "bin": "migrator",
     "dirname": "migrator",
-    "default": ".",
-    "commands": "./dist",
-    "plugins": [],
+    "commands": "./dist/commands",
+    "plugins": [
+      "@oclif/plugin-help"
+    ],
     "topicSeparator": " ",
     "topics": {}
   },
   "pkg": {
-    "scripts": "dist/*.js",
+    "scripts": "dist/**/*.js",
     "assets": [
       "node_modules/drivelist/build/Release/drivelist.node",
       "node_modules/lzma-native/prebuilds/**/*",
