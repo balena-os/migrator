@@ -17,7 +17,7 @@
 import * as _debug from 'debug';
 import { ConnectionProfile, Column, readColumns, runPowershell, PWSH_FORMAT_TABLE, 
 	PWSH_OUTPUT_WIDTH } from './networking-analyzer';
-import { migrator } from '@kb2ma/etcher-sdk';
+import { migrator } from 'etcher-sdk';
 
 const debug = _debug('migrator:wifi-profile-reader');
 const MODULE_NAME = 'WiFiProfileManagement'

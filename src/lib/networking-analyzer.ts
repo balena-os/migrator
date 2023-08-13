@@ -23,7 +23,7 @@ import RWMutex = require('rwmutex');
 import got from 'got';
 import * as ipaddr from 'ipaddr.js';
 import * as wifiProfileReader from './wifi-profile-reader'
-import { tmp, migrator } from '@kb2ma/etcher-sdk';
+import { tmp, migrator } from 'etcher-sdk';
 
 const execFileAsync = promisify(execFile);
 const debug = _debug('migrator:networking-analyzer');

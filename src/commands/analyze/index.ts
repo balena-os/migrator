@@ -1,7 +1,7 @@
 import { Flags } from '@oclif/core';
 // Must use CommonJS version of inquirer due to limitations of vercel/pkg.
 import * as inquirer from 'inquirer';
-import { migrator } from '@kb2ma/etcher-sdk';
+import { migrator } from 'etcher-sdk';
 import { Analyzer, ConnectionProfile } from '../../lib/networking-analyzer'
 import { MigratorCommand } from '../../lib/migrator-command'
 

@@ -54,9 +54,20 @@ runs:
         }
         npm run pkg
 
-        set version "v$(yq e '.[0].version' .versionbot\CHANGELOG.yml)"
+        # Download required WiFiProfileManagement Powershell module v1.1, and copy 
+        # into expected 'modules' subdirectory for release. Use 'dist' directory 
+        # since we need to include migrator binary from there anyway.
         cd dist
-        7z a migrator-${version}-windows-x64.zip migrator.exe
+        set WFPM_COMMIT "c061bc1812a599baf572dc01bc6de077456b8b18"
+        Start-BitsTransfer -Source https://github.com/jcwalker/WiFiProfileManagement/archive/${WFPM_COMMIT}.zip -Destination wfpm.zip
+        7z x wfpm.zip
+        # Remove zip so we don't include it in release.
+        rm wfpm.zip
+        mkdir modules
+        move WiFiProfileManagement-${WFPM_COMMIT} modules\WiFiProfileManagement
+
+        set version "v$(yq e '.[0].version' ..\.versionbot\CHANGELOG.yml)"
+        7z a migrator-${version}-windows-x64.zip migrator.exe modules
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
