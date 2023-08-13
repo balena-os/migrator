@@ -1,4 +1,93 @@
 - commits:
+    - subject: Prepare for release
+      hash: 784dc003bdeb61b50003a80d3a52225739598cae
+      body: |
+        * Include Powershell WiFi module in release archive
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Add --no-wifi option
+      hash: e71ce5c5e26ea9fc020429ef92f9763d2e08ad32
+      body: |
+        If present, does not analyze or migrate WiFi configurations.
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Rework matching connection to WiFi profile
+      hash: c4d75536af97e137c6fc1a787f04aff4b740318d
+      body: |
+        * Improve reliability by using IDs rather than names
+        * Match on a per-interface basis
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Minor UX and reliability enhancements
+      hash: 8f2a78c7f9bb80c3a70b1dd61b03ef3ae27e6caf
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Specify authentication type for connection profile
+      hash: 47e145952e516322c7fecf35e198f3c1489280a9
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Create separate 'analyze' and 'run' commands
+      hash: 78a7c089c790aaafb8ceb91aa9c55827197c908b
+      body: ""
+      footer:
+        Change-type: minor
+        change-type: minor
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Verify can ping balena API
+      hash: 4a0cb9bab30b690bee938b862e5a9ac757041753
+      body: |
+        Only use a network connection that will be available based on
+        WiFi profiles or non-static Ethernet.
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Read WiFi profiles and pass configuration to Etcher
+      hash: 25342c7dcc003abde50af70bd2b9eb9e708772ab
+      body: |
+        * Add wifi-profile-reader module, which uses WiFiProfileManagement
+          module.
+        * Add networking-analyzer module as the entry point to
+          wifi-profile-read and future work
+        * Add typings and dependencies to execute a CLI process and read
+          output
+        * Add standard debug module
+      footer:
+        Change-type: minor
+        change-type: minor
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.3.0
+  title: ""
+  date: 2023-08-13T19:06:31.129Z
+- commits:
     - subject: Add option to only analyze; don't modify computer
       hash: a0a2997c1e328b9853e7a8d67b8045f4753d1418
       body: ""
