@@ -84,7 +84,6 @@ export default class RunCommand extends MigratorCommand {
 		}
 		let options:migrator.MigrateOptions = { omitTasks: flags['skip-tasks'], connectionProfiles: []}
 
-		let resOK = true
 		try {
 			// Run networking analyzer to collect profiles and validate connectivity.
 			const psInstallPath = `${process.cwd()}\\modules`
@@ -96,12 +95,9 @@ export default class RunCommand extends MigratorCommand {
 			profiles.forEach(p => options.connectionProfiles.push(p))
 
 			//console.log(`${flags.image}, ${winPartition}, ${deviceName}, ${efiLabel}, ${options.omitTasks}`)
-			const res = await migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
-			resOK = (res == migrator.MigrateResult.OK) 
+			migrator.migrate(flags.image, winPartition, deviceName, efiLabel, options)
 		} catch (error) {
 			console.log("Can't proceed with migration:", error);
-			resOK = false
 		}
-		this.exit(resOK ? 0 : 1)
 	}
 }
