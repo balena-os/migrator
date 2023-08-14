@@ -1,4 +1,17 @@
 - commits:
+    - subject: Don't explicitly exit process after migrate completion
+      hash: 2ee117fa0fd13d3dd8d47f7b103d1ca3faf0b3bc
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.3.1
+  title: ""
+  date: 2023-08-14T00:40:04.305Z
+- commits:
     - subject: Prepare for release
       hash: 784dc003bdeb61b50003a80d3a52225739598cae
       body: |
