@@ -4,6 +4,7 @@ import * as inquirer from 'inquirer';
 import { migrator } from 'etcher-sdk';
 import { Analyzer, ConnectionProfile } from '../../lib/networking-analyzer'
 import { MigratorCommand } from '../../lib/migrator-command'
+import * as debug from 'debug';
 
 export default class AnalyzerCommand extends MigratorCommand {
 	static description = 'Analyze migration of this device to balenaOS';
@@ -22,6 +23,10 @@ export default class AnalyzerCommand extends MigratorCommand {
 			default: false,
 			description: "do not analyze WiFi network configurations"
 		}),
+		'verbose': Flags.boolean({
+			default: false,
+			description: "display detailed output from operations"
+		})
 	};
 	static args = {};
 
@@ -30,6 +35,11 @@ export default class AnalyzerCommand extends MigratorCommand {
 		const winPartition = "C";
 		const deviceName = "\\\\.\\PhysicalDrive0";
 		const efiLabel = "M";
+
+		if (flags.verbose) {
+			// avoid essentially trace level logging on the copy step
+			debug.enable('*,-etcher:writer*,-rwmutex')
+		}
 
 		const skipTasks = 'shrink,copy,config,bootloader,reboot'
 		const options:migrator.MigrateOptions = { omitTasks: skipTasks, connectionProfiles: []}

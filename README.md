@@ -43,7 +43,7 @@ You must run the command below as Administrator on Windows.
 FLAGS
   -i, --image=<value>    (required) balenaOS flasher image path name
   --no-wifi              do not analyze WiFi network configurations
-
+  --verbose              display detailed output from operations
 ```
 
 You should see output like below on the CLI from the *analyze* command.
@@ -102,6 +102,7 @@ FLAGS
   -i, --image=<value>    (required) balenaOS flasher image path name
   -y, --non-interactive  no user input; use defaults
   --no-wifi              do not migrate WiFi network configurations
+  --verbose              display detailed output from operations
 ```
 Since the migrator executes a destructive operation, it first prompts you to confirm. Use the `--non-interactive` option to avoid the prompt and begin the migration immediately.
 

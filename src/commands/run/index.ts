@@ -4,6 +4,7 @@ import * as inquirer from 'inquirer';
 import { migrator } from 'etcher-sdk';
 import { Analyzer, ConnectionProfile } from '../../lib/networking-analyzer'
 import { MigratorCommand } from '../../lib/migrator-command'
+import * as debug from 'debug';
 
 export default class RunCommand extends MigratorCommand {
 	static description = 'Run migration of this device to balenaOS';
@@ -45,6 +46,10 @@ export default class RunCommand extends MigratorCommand {
 			default: '',
 			hidden: true,
 			description: "don't perform these tasks"
+		}),
+		'verbose': Flags.boolean({
+			default: false,
+			description: "display detailed output from operations"
 		})
 	};
 	static args = {};
@@ -54,6 +59,11 @@ export default class RunCommand extends MigratorCommand {
 		const winPartition = "C";
 		const deviceName = "\\\\.\\PhysicalDrive0";
 		const efiLabel = "M";
+
+		if (flags.verbose) {
+			// avoid essentially trace level logging on the copy step
+			debug.enable('*,-etcher:writer*,-rwmutex')
+		}
 
 		if (!flags['non-interactive']) {
 			console.log("Warning! This tool will overwrite the operating system and all data on this computer.");
