@@ -1,4 +1,26 @@
 - commits:
+    - subject: Add option for verbose command output
+      hash: 2e827feabd0c1c7be72f0ccdcc7003a94b2ff6f8
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+    - subject: Update for etcher-sdk boot failover improvement
+      hash: e9caa884ce45015200aaebcf084f160d83bd5857
+      body: ""
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Ken Bannister <kb2ma@runbox.com>
+        signed-off-by: Ken Bannister <kb2ma@runbox.com>
+      author: Ken Bannister
+  version: 0.3.2
+  title: ""
+  date: 2023-10-07T16:25:36.256Z
+- commits:
     - subject: Don't explicitly exit process after migrate completion
       hash: 2ee117fa0fd13d3dd8d47f7b103d1ca3faf0b3bc
       body: ""
