@@ -43,7 +43,7 @@ You must run the command below as Administrator on Windows.
 FLAGS
   -i, --image=<value>    (required) balenaOS flasher image path name
   --no-wifi              do not analyze WiFi network configurations
-
+  --verbose              display detailed output from operations
 ```
 
 You should see output like below on the CLI from the *analyze* command.
@@ -102,6 +102,7 @@ FLAGS
   -i, --image=<value>    (required) balenaOS flasher image path name
   -y, --non-interactive  no user input; use defaults
   --no-wifi              do not migrate WiFi network configurations
+  --verbose              display detailed output from operations
 ```
 Since the migrator executes a destructive operation, it first prompts you to confirm. Use the `--non-interactive` option to avoid the prompt and begin the migration immediately.
 
@@ -144,6 +145,12 @@ write: {"position":375390208,"bytes":375390208,"speed":882800964.0826695,"averag
 read: {"position":4022337537,"bytes":3976200193,"speed":692391510.844067,"averageSpeed":700652016.3876652}
 write: {"position":3976200193,"bytes":3976200193,"speed":692235395.8367282,"averageSpeed":700281823.3532934}
 Copy complete
+Copying: /EFI/BOOT/BOOTX64.EFI  ~=>      N:\EFI\Boot\BOOTX64.EFI
+Copying: /EFI/BOOT/GRUB.CFG     ~=>      N:\EFI\Boot\GRUB.CFG
+Copying: /EFI/BOOT/GRUBENV      ~=>      N:\EFI\Boot\GRUBENV
+Copying: /EFI/BOOT/bootx64.efi.secureboot       ~=>      N:\EFI\Boot\bootx64.efi.secureboot
+Copying: /EFI/BOOT/grub.cfg.sig         ~=>      N:\EFI\Boot\grub.cfg.sig
+Copying: /EFI/BOOT/grub_extraenv        ~=>      N:\EFI\Boot\grub_extraenv
 
 Write network configuration
 Wrote network configuration for quir29key
