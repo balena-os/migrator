@@ -70,7 +70,7 @@ runs:
         7z a migrator-${version}-windows-x64.zip migrator.exe modules
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@c7d193f32edcb7bfad88892161225aeda64e9392 # v4
       with:
         name: gh-release-${{ github.event.pull_request.head.sha || github.event.head_commit.id }}
         path: dist/*.zip
