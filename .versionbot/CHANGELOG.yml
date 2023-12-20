@@ -1,4 +1,18 @@
 - commits:
+    - subject: Update actions/upload-artifact to v4 and generate unique artifacts
+      hash: ae5e24b20367bfa4af05c6f8adf9590cd1073d03
+      body: |
+        See: https://github.com/actions/upload-artifact/releases/tag/v4.0.0
+      footer:
+        Change-type: patch
+        change-type: patch
+        Signed-off-by: Kyle Harding <kyle@balena.io>
+        signed-off-by: Kyle Harding <kyle@balena.io>
+      author: Kyle Harding
+  version: 0.3.3
+  title: ""
+  date: 2023-12-20T15:45:16.177Z
+- commits:
     - subject: Add option for verbose command output
       hash: 2e827feabd0c1c7be72f0ccdcc7003a94b2ff6f8
       body: ""
