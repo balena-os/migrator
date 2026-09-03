@@ -6,11 +6,16 @@ on:
     branches:
       - "main"
       - "master"
+  push:
+    branches: [main, master]
 
 jobs:
   flowzone:
     name: Flowzone
-    uses: product-os/flowzone/.github/workflows/flowzone.yml@master
+    uses: product-os/flowzone/.github/workflows/flowzone.yml@master # flowzonify 0.4.4
     secrets: inherit
     with:
-      custom_runs_on: '["windows-2022"]'
+      custom_publish_matrix: >
+        {
+          "os": ["windows-2022"]
+        }
